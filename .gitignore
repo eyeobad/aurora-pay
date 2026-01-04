@@ -1,0 +1,13 @@
+node_modules/
+/.expo/
+/*.log
+/.vscode/
+android/
+ios/
+.idea/
+*.xcuserdata/
+*.xcodeproj/
+*.xcworkspace/
+*.sw?
+.DS_Store
+expo-debug.log
