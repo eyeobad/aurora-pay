@@ -1,384 +1,678 @@
 // src/screens/DashboardScreen.tsx
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo } from "react";
 import {
   View,
   SafeAreaView,
-  StyleSheet,
+  StatusBar,
   FlatList,
   RefreshControl,
-  Animated,
-  Easing,
   TouchableOpacity,
-  Dimensions,
+  Image,
+  StyleSheet,
   Platform,
-  StatusBar,
-} from 'react-native';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
-import { MaterialIcons } from '@expo/vector-icons'; // ✅ Material icons
-import {
-  TopHeader,
-  BalanceCard,
-  TransactionListItem,
-  BottomNav,
-  AppText,
-} from '../components';
-import { colors, spacing, radius } from '../components/tokens';
-import { useApp } from '../context/AppContext';
+  Text,
+} from "react-native";
+import { useNavigation, useIsFocused } from "@react-navigation/native";
+import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useApp } from "../context/AppContext";
+import { AppText } from "../components";
 
-const { width } = Dimensions.get('window');
+type Nav = {
+  navigate: (screen: string, params?: any) => void;
+};
 
-type Nav = { navigate: (to: string, params?: any) => void };
+const COLORS = {
+  bg: "#101622",
+  surfaceDark: "#192233",
+  surface2: "#151c2b",
+  primary: "#135bec",
+  primaryDark: "#0c40a8",
+  white: "#ffffff",
+  slate400: "#94a3b8",
+  slate500: "#64748b",
+  slate900: "#0b1220",
+  borderLight: "rgba(255,255,255,0.10)",
+  borderLight2: "rgba(255,255,255,0.08)",
+  emerald: "#4ade80",
+};
 
-type LocalTx = {
-  id: string;
-  title: string;
-  subtitle?: string;
-  amount: string;
-  status?: 'sent' | 'received' | 'pending' | 'failed';
-  date?: string;
-  avatarUri?: string;
+const quickActions = [
+  { key: "send", label: "Send", icon: "send", route: "Transaction" },
+  { key: "request", label: "Request", icon: "cash-sync", route: "Transaction" },
+  { key: "topup", label: "Top Up", icon: "credit-card-plus", route: "TopUp" },
+  { key: "more", label: "More", icon: "view-grid", route: "History" },
+];
+
+const items = [
+  {
+    id: "tx_spotify",
+    title: "Spotify Premium",
+    subtitle: "Subscription • Today, 9:41 AM",
+    amount: "-$12.99",
+    status: "send",
+    icon: "music",
+  },
+  {
+    id: "tx_sarah",
+    title: "Sarah Jenkins",
+    subtitle: "Transfer • Yesterday",
+    amount: "+$50.00",
+    status: "receive",
+    icon: "person",
+  },
+  {
+    id: "tx_starbucks",
+    title: "Starbucks Coffee",
+    subtitle: "Food & Drink • Oct 24",
+    amount: "-$4.50",
+    status: "send",
+    icon: "coffee",
+  },
+  {
+    id: "tx_apple",
+    title: "Apple Store",
+    subtitle: "Electronics • Oct 21",
+    amount: "-$1,299.00",
+    status: "send",
+    icon: "laptop",
+  },
+];
+
+// ✅ map your `items[].icon` to REAL icon names (MaterialCommunityIcons)
+const itemIcon = (icon?: string) => {
+  switch (icon) {
+    case "music":
+      return "music-note";
+    case "person":
+      return "account";
+    case "coffee":
+      return "coffee";
+    case "laptop":
+      return "laptop";
+    default:
+      return "swap-horizontal";
+  }
+};
+
+// ✅ optional: color like the HTML design (Spotify green / orange / slate)
+const itemIconColor = (icon?: string) => {
+  switch (icon) {
+    case "music":
+      return "#1db954";
+    case "person":
+      return COLORS.primary;
+    case "coffee":
+      return "#f97316";
+    case "laptop":
+      return "#94a3b8";
+    default:
+      return "#ffffff";
+  }
+};
+
+// ✅ optional: subtle tinted background like the HTML design
+const itemIconBg = (icon?: string) => {
+  switch (icon) {
+    case "music":
+      return "rgba(29,185,84,0.12)";
+    case "person":
+      return "rgba(19,91,236,0.12)";
+    case "coffee":
+      return "rgba(249,115,22,0.12)";
+    case "laptop":
+      return "rgba(148,163,184,0.12)";
+    default:
+      return "rgba(255,255,255,0.10)";
+  }
 };
 
 export default function DashboardScreen() {
-  const nav = useNavigation<Nav>();
+  const navigation = useNavigation<Nav>();
   const isFocused = useIsFocused();
   const { state, refresh } = useApp();
+
   const refreshing = state.loading ?? false;
   const balance = state.balance ?? 0;
-  const storageTxs = state.transactions ?? [];
-
-  // animations for the balance card and actions grid
-  const balanceAnim = useRef(new Animated.Value(0)).current;
-  const actionsAnim = useRef(new Animated.Value(0)).current;
+  const transactions = state.transactions ?? [];
 
   useEffect(() => {
-    Animated.stagger(120, [
-      Animated.timing(balanceAnim, {
-        toValue: 1,
-        duration: 600,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(actionsAnim, {
-        toValue: 1,
-        duration: 600,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [balanceAnim, actionsAnim]);
+    if (!state.user) navigation.navigate("Login");
+  }, [state.user, navigation]);
 
-  // redirect to Login if no authenticated user
   useEffect(() => {
-    if (!state.user) {
-      nav.navigate('Login');
-    }
-  }, [state.user, nav]);
-
-  // refresh data on focus
-  useEffect(() => {
-    if (isFocused) {
-      refresh().catch((e) => console.warn('Dashboard refresh error:', e));
-    }
+    if (isFocused) refresh().catch(() => {});
   }, [isFocused, refresh]);
 
-  const onRefresh = useCallback(async () => {
-    try {
-      await refresh();
-    } catch (e) {
-      console.warn('Refresh failed:', e);
+  const onRefresh = () => refresh().catch(() => {});
+
+  // ✅ UPDATE: if you have real transactions, use them.
+  // ✅ Otherwise fall back to your static `items` so UI always shows something.
+  const recentTxs = useMemo(() => {
+    if (transactions.length > 0) {
+      return transactions.slice(0, 6).map((tx) => ({
+        id: tx.id,
+        title: tx.counterparty ?? tx.type,
+        subtitle: `${tx.type.charAt(0).toUpperCase() + tx.type.slice(1)} • ${new Date(
+          tx.createdAt
+        ).toLocaleDateString()}`,
+        amount: tx.type === "send" ? `-$${Number(tx.amount).toFixed(2)}` : `+$${Number(tx.amount).toFixed(2)}`,
+        status: tx.type,
+        icon: tx.type === "send" ? "laptop" : "person", // safe default
+      }));
     }
-  }, [refresh]);
+    return items;
+  }, [transactions]);
 
-  // quick actions with Material icons
-  const actions = [
-    { key: 'send', label: 'Send', icon: 'send', onPress: () => nav.navigate('Transaction') },
-    { key: 'receive', label: 'Receive', icon: 'arrow_downward', onPress: () => nav.navigate('Receive') },
-    { key: 'topup', label: 'Top up', icon: 'add_card', onPress: () => nav.navigate('TopUp') },
-    { key: 'pay', label: 'Pay', icon: 'payment', onPress: () => nav.navigate('PayMerchant') },
-  ];
-
-  // sample spending sparkline
-  const sparkValues = [30, 45, 28, 70, 40, 65, 50];
-  const maxVal = Math.max(...sparkValues);
-
-  // map stored transactions to local transactions
-  const mappedTxs: LocalTx[] = storageTxs.slice(0, 20).map((t) => ({
-    id: t.id,
-    title: t.counterparty ?? t.type,
-    subtitle: t.note ?? '',
-    amount: t.type === 'send' ? `-$${Number(t.amount).toFixed(2)}` : `+$${Number(t.amount).toFixed(2)}`,
-    status: (t.status === 'completed'
-      ? (t.type === 'send' ? 'sent' : 'received')
-      : (t.status as any)) as LocalTx['status'],
-    date: new Date(t.createdAt).toLocaleDateString(),
-    avatarUri: (t as any).avatarUri ?? undefined,
-  }));
-
-  const renderTx = ({ item }: { item: LocalTx }) => (
-    <TransactionListItem
-      testID={`tx-${item.id}`}
-      title={item.title}
-      subtitle={item.subtitle}
-      amount={item.amount}
-      status={item.status}
-      avatarUri={item.avatarUri}
-      onPress={() => nav.navigate('TransactionDetail', { id: item.id })}
-    />
-  );
-
-  // adjust for status bar on Android
-  const topSpacer = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 12) : 12;
+  const Amount = ({ value }: { value: string }) => {
+    const isNegative = value.startsWith("-");
+    return <Text style={[styles.amount, isNegative ? styles.amountNeg : styles.amountPos]}>{value}</Text>;
+  };
 
   return (
     <SafeAreaView style={styles.root}>
-      {/* Top header with notification trigger */}
-      <View style={{ paddingTop: topSpacer, backgroundColor: 'transparent' }}>
-        <TopHeader
-          title="Wallet"
-          right={
-            <TouchableOpacity onPress={() => nav.navigate('Notifications')} accessibilityRole="button">
-              <AppText variant="button" style={{ color: colors.surface }}>
-                🔔
-              </AppText>
-            </TouchableOpacity>
-          }
-        />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
+
+      {/* Top bar */}
+      <View style={styles.topBar}>
+        <View style={styles.userRow}>
+          <View style={styles.avatarWrap}>
+            <Image style={styles.avatar} source={require("../assets/logo (1).png")} resizeMode="cover" />
+          </View>
+
+          <View>
+            <AppText variant="caption" style={{ color: COLORS.slate400 }}>
+              Good Morning
+            </AppText>
+            <AppText variant="h3" style={{ color: COLORS.white }}>
+              Alex 👋
+            </AppText>
+          </View>
+        </View>
+
+        <TouchableOpacity style={styles.notifBtn} accessibilityRole="button">
+          <MaterialIcons name="notifications" size={24} color="#f8fafc" />
+        </TouchableOpacity>
       </View>
 
-      {/* Main scrollable area with pull‑to‑refresh */}
-      <Animated.ScrollView
-        contentContainerStyle={styles.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      {/* List */}
+      <FlatList
+        data={recentTxs}
+        keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
-      >
-        {/* Balance card */}
-        <Animated.View
-          style={[
-            styles.balanceWrap,
-            {
-              opacity: balanceAnim,
-              transform: [
-                {
-                  translateY: balanceAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }),
-                },
-              ],
-            },
-          ]}
-        >
-          <BalanceCard
-            testID="balancecard"
-            available={balance}
-            pending={0}
-            onAction={(k) => {
-              if (k === 'send') nav.navigate('Transaction');
-              else if (k === 'receive') nav.navigate('Receive');
-              else if (k === 'topup') nav.navigate('TopUp');
-            }}
-          />
-        </Animated.View>
+        contentContainerStyle={styles.listContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
+        ListHeaderComponent={
+          <>
+            {/* Balance Card */}
+            <View style={styles.cardOuter}>
+              <LinearGradient
+                colors={[COLORS.primary, COLORS.primaryDark]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.balanceCard}
+              >
+                {/* glow blobs */}
+                <View style={[styles.blob, styles.blobTopRight]} />
+                <View style={[styles.blob2, styles.blobBottomLeft]} />
 
-        {/* Quick actions grid with Material icons */}
-        <Animated.View
-          style={[
-            styles.actionsGrid,
-            {
-              opacity: actionsAnim,
-              transform: [
-                {
-                  translateY: actionsAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }),
-                },
-              ],
-            },
-          ]}
-        >
-          {actions.map((a) => (
-            <TouchableOpacity key={a.key} style={styles.actionItem} onPress={a.onPress} accessibilityRole="button">
-              <View style={styles.actionIconWrap}>
-                <MaterialIcons name={a.icon as any} size={26} color={colors.primary} />
+                <View style={styles.balanceContent}>
+                  <View style={styles.balanceHeaderRow}>
+                    <AppText variant="caption" style={{ color: "rgba(255,255,255,0.8)" }}>
+                      Total Balance
+                    </AppText>
+
+                    <View style={styles.currencyPill}>
+                      <Text style={styles.currencyText}>USD</Text>
+                      <MaterialCommunityIcons name="chevron-down" size={14} color="#fff" />
+                    </View>
+                  </View>
+
+                  <Text style={styles.balanceValue}>${balance.toFixed(2)}</Text>
+
+                  <View style={styles.deltaRow}>
+                    <View style={styles.deltaPill}>
+                      <MaterialCommunityIcons name="trending-up" size={16} color={COLORS.emerald} />
+                      <Text style={styles.deltaText}>+2.4%</Text>
+                    </View>
+                    <Text style={styles.deltaSub}>this month</Text>
+                  </View>
+
+                  <TouchableOpacity style={styles.cardNumberRow} accessibilityRole="button">
+                    <Text style={styles.cardNumber}>**** 4582</Text>
+                    <MaterialIcons name="content-copy" size={16} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              </LinearGradient>
+            </View>
+
+            {/* Quick Actions */}
+            <View style={styles.actionsWrap}>
+              <View style={styles.actionsRow}>
+                {quickActions.map((action) => (
+                  <View key={action.key} style={styles.actionItem}>
+                    <TouchableOpacity
+                      style={styles.actionBtn}
+                      onPress={() => navigation.navigate(action.route)}
+                      accessibilityRole="button"
+                    >
+                      <MaterialCommunityIcons name={action.icon as any} size={26} color={COLORS.slate900} />
+                    </TouchableOpacity>
+                    <Text style={styles.actionLabel}>{action.label}</Text>
+                  </View>
+                ))}
               </View>
-              <AppText variant="caption" style={styles.actionLabel}>
-                {a.label}
-              </AppText>
-            </TouchableOpacity>
-          ))}
-        </Animated.View>
+            </View>
 
-        {/* Spending analytics with mini sparkline chart and category legend */}
-        <View style={styles.analytics}>
-          <View style={styles.analyticsLeft}>
-            <AppText variant="h2">Spending</AppText>
-            <AppText variant="caption" style={{ marginTop: 6 }}>
-              Last 7 days
-            </AppText>
-            <View style={styles.sparkline}>
-              {sparkValues.map((v, i) => {
-                const heightVal = (v / maxVal) * 40 + 6;
-                return <View key={i} style={[styles.sparkBar, { height: heightVal }]} />;
-              })}
+            {/* Recent header */}
+            <View style={styles.recentHeaderCard}>
+              <View style={styles.recentHeaderRow}>
+                <Text style={styles.recentTitle}>Recent Activity</Text>
+
+                <TouchableOpacity
+                  style={styles.seeAllBtn}
+                  onPress={() => navigation.navigate("History")}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.seeAllText}>See All</Text>
+                  <MaterialIcons name="arrow-forward" size={18} color={COLORS.primary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        }
+        // ✅ UPDATE: use item.icon + amount color matches your data
+        renderItem={({ item }) => (
+          <View style={styles.txOuter}>
+            <View style={styles.txRow}>
+              <View style={styles.txLeft}>
+                <View style={[styles.txIconWrap, { backgroundColor: itemIconBg((item as any).icon) }]}>
+                  <MaterialCommunityIcons
+                    name={itemIcon((item as any).icon) as any}
+                    size={22}
+                    color={itemIconColor((item as any).icon)}
+                  />
+                </View>
+
+                <View>
+                  <Text style={styles.txTitle}>{(item as any).title}</Text>
+                  <Text style={styles.txSubtitle}>{(item as any).subtitle}</Text>
+                </View>
+              </View>
+
+              <Amount value={(item as any).amount} />
             </View>
           </View>
-          <View style={styles.analyticsRight}>
-            <AppText variant="caption" style={{ color: colors.muted }}>
-              Categories
-            </AppText>
-            <View style={{ height: 8 }} />
-            <View style={styles.categoryRow}>
-              <View style={[styles.pill, { backgroundColor: colors.primary }]} />
-              <AppText variant="caption">Transport</AppText>
-            </View>
-            <View style={styles.categoryRow}>
-              <View style={[styles.pill, { backgroundColor: colors.accent }]} />
-              <AppText variant="caption">Food</AppText>
-            </View>
-            <View style={styles.categoryRow}>
-              <View style={[styles.pill, { backgroundColor: colors.success }]} />
-              <AppText variant="caption">Bills</AppText>
-            </View>
-          </View>
-        </View>
+        )}
+      />
 
-        {/* Recent activity header and list */}
-        <View style={styles.txHeader}>
-          <AppText variant="h2">Recent activity</AppText>
-          <TouchableOpacity onPress={() => nav.navigate('History')} accessibilityRole="button">
-            <AppText variant="caption" style={{ color: colors.primary }}>
-              See all
-            </AppText>
+      {/* Floating Bottom Nav */}
+      <View style={styles.bottomWrap} pointerEvents="box-none">
+        {/* ✅ removed border as requested */}
+        <View style={styles.bottomNav}>
+          <TouchableOpacity style={styles.navItemActive} accessibilityRole="button">
+            <MaterialIcons name="home" size={29} color={COLORS.primary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.navItem} accessibilityRole="button">
+            <MaterialCommunityIcons name="credit-card" size={27} color={COLORS.slate400} />
+          </TouchableOpacity>
+
+          {/* ✅ FAB: blur look without using reanimated; no border */}
+          <TouchableOpacity style={styles.fab} accessibilityRole="button"onPress={() => navigation.navigate("Scanner")}>
+            <LinearGradient
+              colors={[COLORS.primary, COLORS.primaryDark]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.fabGradient}
+              
+            >
+              <MaterialCommunityIcons name="qrcode-scan" size={28} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.navItem} accessibilityRole="button">
+            <MaterialIcons name="history" size={29} color={COLORS.slate400} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.navItem} accessibilityRole="button">
+            <MaterialIcons name="settings" size={28} color={COLORS.slate400} />
           </TouchableOpacity>
         </View>
-
-        <FlatList
-          data={mappedTxs}
-          keyExtractor={(i) => i.id}
-          renderItem={renderTx}
-          scrollEnabled={false}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          contentContainerStyle={{ paddingBottom: 24 }}
-        />
-      </Animated.ScrollView>
-
-      {/* Bottom navigation bar */}
-      <BottomNav
-        items={[
-          { key: 'home', label: 'Home' },
-          { key: 'wallet', label: 'Wallet' },
-          { key: 'scan', label: 'Scan' },
-          { key: 'activity', label: 'Activity' },
-          { key: 'profile', label: 'Profile' },
-        ]}
-        activeKey="home"
-        onNavigate={(k) => {
-          if (k === 'profile') nav.navigate('Profile');
-          else if (k === 'wallet') nav.navigate('Wallet');
-          else if (k === 'scan') nav.navigate('Scanner');
-          else if (k === 'activity') nav.navigate('History');
-          else nav.navigate('Dashboard');
-        }}
-      />
+      </View>
     </SafeAreaView>
   );
 }
 
+const NAV_H = 72;
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: COLORS.bg,
   },
-  scroll: {
-    padding: spacing.md,
-    paddingBottom: 8 + 80, // room for bottom nav
+
+  topBar: {
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) + 12 : 16,
+    paddingBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  balanceWrap: {
-    marginTop: spacing.sm,
-  },
-  actionsGrid: {
-    marginTop: spacing.md,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+
+  userRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
+  },
+  avatarWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    overflow: "hidden",
+    // ✅ keep your original here
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    backgroundColor: COLORS.surfaceDark,
+  },
+  avatar: {
+    width: "100%",
+    height: "100%",
+  },
+  notifBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    // ✅ keep your original here
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    backgroundColor: COLORS.slate900,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  listContent: {
+    paddingBottom: NAV_H + 64,
+  },
+
+  cardOuter: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 24,
+  },
+  balanceCard: {
+    borderRadius: 32,
+    overflow: "hidden",
+    padding: 24,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
+  },
+  balanceContent: {
+    gap: 18,
+  },
+  balanceHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  currencyPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.20)",
+  },
+  currencyText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  balanceValue: {
+    color: "#fff",
+    fontSize: 36,
+    fontWeight: "900",
+    letterSpacing: -0.8,
+  },
+  deltaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  deltaPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(74, 222, 128, 0.18)",
+  },
+  deltaText: {
+    color: COLORS.emerald,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+  deltaSub: {
+    color: "rgba(255,255,255,0.60)",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  cardNumberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    opacity: 0.9,
+  },
+  cardNumber: {
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: "700",
+    fontSize: 12,
+    letterSpacing: 1.2,
+  },
+
+  blob: {
+    position: "absolute",
+    width: 160,
+    height: 160,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  blob2: {
+    position: "absolute",
+    width: 160,
+    height: 160,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.10)",
+  },
+  blobTopRight: {
+    top: -40,
+    right: -40,
+  },
+  blobBottomLeft: {
+    bottom: -40,
+    left: -40,
+  },
+
+  actionsWrap: {
+    paddingHorizontal: 24,
+    paddingBottom: 22,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 14,
   },
   actionItem: {
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1,
-    paddingVertical: 12,
-    marginHorizontal: 6,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
+    gap: 8,
   },
-  actionIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(15,15,15,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
+  actionBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 999,
+    backgroundColor: "rgba(248,250,252,0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   actionLabel: {
-    color: colors.textPrimary,
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.slate400,
   },
-  analytics: {
-    marginTop: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
+
+  recentHeaderCard: {
+    marginHorizontal: 24,
+    marginBottom: 8,
+    borderRadius: 32,
+    padding: 18,
+    backgroundColor: COLORS.surface2,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight2,
   },
-  analyticsLeft: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    marginRight: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
+  recentHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  analyticsRight: {
-    width: width * 0.34,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
+  recentTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: -0.2,
   },
-  sparkline: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    height: 48,
-    marginTop: 12,
+  seeAllBtn: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
-  sparkBar: {
-    width: 8,
-    marginHorizontal: 4,
-    backgroundColor: colors.primary,
-    borderRadius: 6,
-    opacity: 0.95,
+  seeAllText: {
+    color: COLORS.primary,
+    fontWeight: "900",
+    fontSize: 14,
   },
-  pill: {
-    width: 10,
-    height: 10,
-    borderRadius: 6,
-    marginRight: 8,
+
+  txOuter: {
+    paddingHorizontal: 24,
+    paddingTop: 10,
   },
-  txHeader: {
-    marginTop: spacing.lg,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  txRow: {
+    borderRadius: 18,
+    backgroundColor: COLORS.slate900,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  categoryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
+  txLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+    paddingRight: 10,
+  },
+  txIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    // ✅ default; overridden per-item
+    backgroundColor: "#1e1b4c",
+  },
+  txTitle: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  txSubtitle: {
+    color: COLORS.slate400,
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  amount: {
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  amountPos: {
+    color: COLORS.emerald,
+  },
+  amountNeg: {
+    color: "#fff",
+  },
+
+  bottomWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 24,
+    paddingBottom: Platform.OS === "ios" ? 22 : 18,
+    paddingTop: 10,
+  },
+  bottomNav: {
+    height: NAV_H,
+    borderRadius: 999,
+    // ✅ NO BORDER (you said: "i dont want any border")
+    borderWidth: 0,
+    borderColor: "transparent",
+    backgroundColor: "rgba(25,34,51,0.92)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+  },
+  navItem: {
+    width: 52,
+    height: 52,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  navItemActive: {
+    width: 64,
+    height: 60,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
+
+  fab: {
+    width: 56,
+    height: 56,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: -26,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 12,
+    overflow: "hidden", // ✅ makes gradient clip perfectly
+  },
+  fabGradient: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

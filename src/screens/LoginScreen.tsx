@@ -14,7 +14,7 @@ import {
   Animated,
   Dimensions,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, CommonActions } from "@react-navigation/native";
@@ -51,18 +51,19 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const loading = state.loading;
+
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastTranslateY = useRef(new Animated.Value(20)).current;
   const scanAnim = useRef(new Animated.Value(0)).current;
   const [toastMessage, setToastMessage] = useState("");
 
-  // Safe area insets for padding
   const insets = useSafeAreaInsets();
 
   const showToast = (message: string) => {
     setToastMessage(message);
     toastOpacity.setValue(0);
     toastTranslateY.setValue(20);
+
     Animated.parallel([
       Animated.timing(toastOpacity, {
         toValue: 1,
@@ -147,14 +148,21 @@ export default function LoginScreen() {
     outputRange: [60, -10],
   });
 
+  // ✅ Android: don't add bottom safe-area padding (prevents weird extra gap)
+  const bottomPad = Platform.OS === "ios" ? 24 + insets.bottom : 24;
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.backgroundDark} />
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <ScrollView
+          // ✅ IMPORTANT: paint full screen with same bg (fixes “white strip” on Android)
           style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad }]}
+          bounces={false}
+          overScrollMode="never"
+          showsVerticalScrollIndicator={false}
         >
           {/* Header with logo */}
           <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
@@ -225,10 +233,7 @@ export default function LoginScreen() {
                   onChangeText={setPassword}
                   secureTextEntry={!isPasswordVisible}
                 />
-                <TouchableOpacity
-                  style={styles.eyeIcon}
-                  onPress={() => setIsPasswordVisible((prev) => !prev)}
-                >
+                <TouchableOpacity style={styles.eyeIcon} onPress={() => setIsPasswordVisible((prev) => !prev)}>
                   <MaterialIcons
                     name={isPasswordVisible ? "visibility" : "visibility-off"}
                     size={20}
@@ -238,10 +243,7 @@ export default function LoginScreen() {
               </View>
 
               {/* Forgot password link */}
-              <TouchableOpacity
-                style={styles.forgotContainer}
-                onPress={() => navigation.navigate("ForgotPassword")}
-              >
+              <TouchableOpacity style={styles.forgotContainer} onPress={() => navigation.navigate("ForgotPassword")}>
                 <Text style={styles.forgotText}>Forgot Password?</Text>
               </TouchableOpacity>
 
@@ -268,9 +270,7 @@ export default function LoginScreen() {
               <TouchableOpacity style={styles.faceIdButton} onPress={handleFaceID}>
                 <View style={styles.faceIdIconContainer}>
                   <MaterialIcons name="face" size={28} color={COLORS.primary} style={{ zIndex: 10 }} />
-                  <Animated.View
-                    style={[styles.scanLine, { transform: [{ translateY: scanTranslateY }] }]}
-                  />
+                  <Animated.View style={[styles.scanLine, { transform: [{ translateY: scanTranslateY }] }]} />
                 </View>
                 <Text style={styles.biometricText}>Use Face ID</Text>
               </TouchableOpacity>
@@ -309,6 +309,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.backgroundDark,
   },
+  // ✅ make scrollview paint full height with bg
   scrollView: {
     flex: 1,
     backgroundColor: COLORS.backgroundDark,
@@ -316,7 +317,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     alignItems: "center",
-    paddingBottom: 24,
   },
   header: {
     flexDirection: "row",

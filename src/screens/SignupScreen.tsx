@@ -547,5 +547,6 @@ const styles = StyleSheet.create({
     marginTop: 32,
     paddingBottom: 32,
     alignItems: "center",
+    opacity: 0,
   },
 });

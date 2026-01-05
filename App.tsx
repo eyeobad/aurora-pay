@@ -1,14 +1,15 @@
 // App.tsx
 import "./tailwind.css";
 import React, { useEffect } from "react";
+import { Platform } from "react-native";
 import "react-native-get-random-values";
+
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { AppProvider } from "./src/context/AppContext";
-
-import { Platform } from "react-native";
 import * as NavigationBar from "expo-navigation-bar";
+
+import { AppProvider } from "./src/context/AppContext";
 
 import SplashScreen from "./src/screens/SplashScreen";
 import LoginScreen from "./src/screens/LoginScreen";
@@ -17,15 +18,19 @@ import DashboardScreen from "./src/screens/DashboardScreen";
 import TransactionScreen from "./src/screens/TransactionScreen";
 import TransactionHistoryScreen from "./src/screens/TransactionHistoryScreen";
 import TopUpScreen from "./src/screens/TopUpScreen";
-import ScannerScreen from "./src/screens/ScannerScreen";  
+import ScannerScreen from "./src/screens/ScannerScreen";
+
 const Stack = createNativeStackNavigator();
 
 export default function App() {
   useEffect(() => {
-    // Set the Android navigation bar color to dark to avoid a white bar
     if (Platform.OS === "android") {
-      NavigationBar.setBackgroundColorAsync("#101622");
-      NavigationBar.setButtonStyleAsync("light");
+      (async () => {
+        // Put nav bar over your UI so your background shows behind it
+        await NavigationBar.setPositionAsync("absolute");
+        await NavigationBar.setBackgroundColorAsync("transparent");
+        await NavigationBar.setButtonStyleAsync("light");
+      })();
     }
   }, []);
 
