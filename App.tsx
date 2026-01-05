@@ -19,7 +19,7 @@ import TransactionScreen from "./src/screens/TransactionScreen";
 import TransactionHistoryScreen from "./src/screens/TransactionHistoryScreen";
 import TopUpScreen from "./src/screens/TopUpScreen";
 import ScannerScreen from "./src/screens/ScannerScreen";
-
+import TransactionrequestScreen from "./src/screens/TransactionrequestScreen";
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -52,6 +52,7 @@ export default function App() {
             <Stack.Screen name="History" component={TransactionHistoryScreen} />
             <Stack.Screen name="TopUp" component={TopUpScreen} />
             <Stack.Screen name="Scanner" component={ScannerScreen} />
+            <Stack.Screen name="request" component={TransactionrequestScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>

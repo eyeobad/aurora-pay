@@ -1,649 +1,599 @@
 // src/screens/TopUpScreen.tsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   SafeAreaView,
   View,
+  Text,
   StyleSheet,
-  Animated,
-  Easing,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
   StatusBar,
   Modal,
-  TextInput,
-  Text,
-  Alert,
+  Platform,
 } from "react-native";
+import { MaterialIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
 import { useNavigation } from "@react-navigation/native";
-
-import { AppText, Input, Button, IconButton } from "../components";
-import { colors, spacing, radius } from "../components/tokens";
-
 import { useApp } from "../context/AppContext";
 
-type Nav = {
-  goBack: () => void;
-  navigate: (name: string, params?: any) => void;
+const COLORS = {
+  bg: "#101622",
+  surface: "#1c2533",
+  surface2: "#232f48",
+  primary: "#135bec",
+  primaryDark: "#0c40a8",
+  white: "#ffffff",
+  slate: "#92a4c9",
+  overlay: "rgba(0,0,0,0.55)",
+  border: "rgba(255,255,255,0.06)",
 };
 
+type FundingSourceType = "wallet" | "card" | "bank" | "ussd";
+
+type FundingSource = {
+  id: string;
+  type: FundingSourceType;
+  label: string; // "Chase Bank"
+  detail: string; // "•••• 1234" or "Aurora Wallet"
+  subtitle?: string; // "Instant" / "Visa" / "1-2 days"
+};
+
+const FUNDING_SOURCES: FundingSource[] = [
+  { id: "wallet", type: "wallet", label: "Wallet", detail: "Aurora Wallet", subtitle: "Instant" },
+  { id: "chase", type: "card", label: "Chase Bank", detail: "•••• 1234", subtitle: "Visa" },
+  { id: "visa4242", type: "card", label: "Visa", detail: "•••• 4242", subtitle: "Card" },
+  { id: "bank", type: "bank", label: "Bank Transfer", detail: "ACH / Local", subtitle: "1–2 days" },
+  { id: "ussd", type: "ussd", label: "USSD", detail: "*123#", subtitle: "Mobile banking" },
+];
+
 export default function TopUpScreen() {
-  const nav = useNavigation<Nav>();
+  const nav = useNavigation<any>();
   const { state, topUp, refresh } = useApp();
 
-  // entrance
-  const appear = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(appear, { toValue: 1, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-  }, [appear]);
+  const balance = state.balance ?? 0;
 
-  // small top spacer so header doesn't overlap status bar
-  const topSpacer = Platform.OS === "android" ? (StatusBar.currentHeight ?? 14) : 14;
+  // amount string composed by keypad
+  const [amountStr, setAmountStr] = useState<string>("50");
+  const [showSourceModal, setShowSourceModal] = useState(false);
+  const [selectedSource, setSelectedSource] = useState<FundingSource>(FUNDING_SOURCES[1]); // default Chase
 
-  // form
-  const [amountRaw, setAmountRaw] = useState<string>(""); // raw numeric string
-  const [method, setMethod] = useState<"card" | "bank" | "ussd">("card");
-  const [note, setNote] = useState<string>("Top up wallet");
+  // ---- Amount helpers
+  const parsedAmount = useMemo(() => {
+    const n = parseFloat(amountStr || "0");
+    return Number.isFinite(n) ? n : 0;
+  }, [amountStr]);
 
-  // UI state
-  // balance and loading come from context state
-  const balance = state.balance ?? null;
-  const loading = state.loading ?? false;
+  const dollars = useMemo(() => {
+    const whole = Math.floor(parsedAmount);
+    return String(whole);
+  }, [parsedAmount]);
 
-  // modals
-  const [showSummary, setShowSummary] = useState(false);
-  const [showPin, setShowPin] = useState(false);
-  const [showResult, setShowResult] = useState(false);
-  const [resultSuccess, setResultSuccess] = useState<boolean | null>(null);
-  const [lastTx, setLastTx] = useState<any | null>(null);
+  const cents = useMemo(() => {
+    const dec = Math.round((parsedAmount - Math.floor(parsedAmount)) * 100);
+    return `.${String(dec).padStart(2, "0")}`;
+  }, [parsedAmount]);
 
-  // pin
-  const [pin, setPin] = useState(["", "", "", ""]);
-  const pinInputs = [useRef<TextInput | null>(null), useRef<TextInput | null>(null), useRef<TextInput | null>(null), useRef<TextInput | null>(null)];
-
-  // animations for modals
-  const summaryAnim = useRef(new Animated.Value(0)).current;
-  const pinAnim = useRef(new Animated.Value(0)).current;
-  const resultAnim = useRef(new Animated.Value(0)).current;
-
-  // presets
-  const presets = [10, 25, 50, 100, 200];
-
-  // utils
-  function numericValueFromRaw(raw: string) {
-    const numeric = parseFloat(String(raw).replace(/[^0-9.-]+/g, ""));
-    return Number.isNaN(numeric) ? 0 : numeric;
-  }
-  function formatCurrency(n: number) {
+  const formatMoney = (n: number) => {
     try {
       return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
     } catch {
-      return String(n);
+      return `$${n.toFixed(2)}`;
     }
-  }
+  };
 
-  const amount = numericValueFromRaw(amountRaw);
-  const fee = Math.max(0, Math.round(amount * 0.01 * 100) / 100); // small example fee 1%
-  const total = +(amount + fee).toFixed(2);
+  const hapticLight = async () => {
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {}
+  };
 
-  // keep local balance in sync if need be to render derived UI besides `balance`
-  // (not strictly necessary since we read `balance` directly from context)
-  useEffect(() => {
-    // no-op; placeholder in case we might later want to sync derived local state
-  }, [balance]);
+  const hapticSuccess = async () => {
+    try {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {}
+  };
 
-  // presets behavior
-  function pickPreset(v: number) {
-    setAmountRaw(String(v));
-  }
+  const setPreset = async (v: number) => {
+    await hapticLight();
+    setAmountStr(String(v));
+  };
 
-  // method selector
-  function selectMethod(m: "card" | "bank" | "ussd") {
-    setMethod(m);
-  }
+  const onKeyPress = async (key: string) => {
+    await hapticLight();
 
-  // validation
-  function validate() {
-    if (amount <= 0) return "Enter an amount greater than 0.";
-    return null;
-  }
-
-  // open/close helpers with small animations
-  function openSummary() {
-    setShowSummary(true);
-    summaryAnim.setValue(0);
-    Animated.timing(summaryAnim, { toValue: 1, duration: 240, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-  }
-  function closeSummary(cb?: () => void) {
-    Animated.timing(summaryAnim, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => {
-      setShowSummary(false);
-      if (cb) cb();
-    });
-  }
-
-  function openPin() {
-    setShowPin(true);
-    pinAnim.setValue(0);
-    Animated.timing(pinAnim, { toValue: 1, duration: 240, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-  }
-  function closePin(cb?: () => void) {
-    Animated.timing(pinAnim, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => {
-      setShowPin(false);
-      if (cb) cb();
-    });
-  }
-
-  function openResult(success: boolean) {
-    setResultSuccess(success);
-    setShowResult(true);
-    resultAnim.setValue(0);
-    Animated.timing(resultAnim, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-  }
-  function closeResult(cb?: () => void) {
-    Animated.timing(resultAnim, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(() => {
-      setShowResult(false);
-      setResultSuccess(null);
-      if (cb) cb();
-    });
-  }
-
-  // confirm CTA
-  function onContinue() {
-    const err = validate();
-    if (err) {
-      Alert.alert("Validation", err);
+    if (key === "back") {
+      setAmountStr((prev) => {
+        const next = prev.length <= 1 ? "0" : prev.slice(0, -1);
+        return next === "" ? "0" : next;
+      });
       return;
     }
-    openSummary();
-  }
 
-  // pin helpers
-  function onPinChange(index: number, value: string) {
-    if (value.length > 1) value = value.slice(-1);
-    const next = [...pin];
-    next[index] = value.replace(/[^0-9]/g, "");
-    setPin(next);
-    if (value && index < 3) pinInputs[index + 1].current?.focus();
-    if (!value && index > 0) pinInputs[index - 1].current?.focus();
-  }
-  function clearPin() {
-    setPin(["", "", "", ""]);
-    pinInputs[0].current?.focus();
-  }
-
-  // after confirming summary -> close summary then open pin
-  function onSummaryConfirm() {
-    closeSummary(() => {
-      setTimeout(() => {
-        clearPin();
-        openPin();
-      }, 120);
-    });
-  }
-
-  // perform top up using context topUp()
-  async function handleTopUp() {
-    const code = pin.join("");
-    if (code.length !== 4) {
-      Alert.alert("Invalid PIN", "Enter your 4-digit PIN to confirm.");
+    if (key === ".") {
+      setAmountStr((prev) => (prev.includes(".") ? prev : `${prev}.`));
       return;
     }
+
+    // digit
+    setAmountStr((prev) => {
+      if (prev === "0") return key;
+      // max 2 decimals
+      if (prev.includes(".")) {
+        const [a, b = ""] = prev.split(".");
+        if (b.length >= 2) return prev;
+        return `${a}.${b}${key}`;
+      }
+      // limit length a bit
+      if (prev.length >= 7) return prev;
+      return prev + key;
+    });
+  };
+
+  const pickSource = async (src: FundingSource) => {
+    await hapticLight();
+    setSelectedSource(src);
+    setShowSourceModal(false);
+  };
+
+  const addFunds = async () => {
+    if (parsedAmount <= 0) return;
+
+    await hapticSuccess();
 
     try {
-      // call topUp from context — it will update storage and app state
-      const created = await topUp({ amount, fee, note });
-
-      setLastTx(created);
-
-      // close pin -> show result
-      closePin(() => {
-        setTimeout(() => openResult(true), 140);
+      await topUp({
+        amount: parsedAmount,
+        fee: 0,
+        note: `Top up from ${selectedSource.label} ${selectedSource.detail}`,
       });
-
-      // ensure state is current (topUp should already update context but refresh is safe)
       await refresh();
-    } catch (e: any) {
-      console.warn("topup failed", e);
-      closePin(() => {
-        setTimeout(() => openResult(false), 140);
-      });
-    } finally {
-      clearPin();
+      nav.goBack();
+    } catch (e) {
+      // keep simple (your app may have toast)
+      console.warn("Top up failed:", e);
     }
-  }
+  };
 
-  function onDownloadReceipt() {
-    Alert.alert("Download", "Receipt download started (demo).");
-  }
+  const topSpacer = Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : 0;
 
   return (
     <SafeAreaView style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <Animated.View
-          style={[
-            styles.container,
-            {
-              paddingTop: topSpacer, // <-- safe spacer so header doesn't overlap status bar
-              opacity: appear,
-              transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
-            },
-          ]}
-        >
-          <View style={styles.headerRow}>
-            <TouchableOpacity onPress={() => nav.goBack()} accessibilityRole="button" style={styles.backBtn}>
-              <AppText variant="button" style={{ color: colors.primary }}>
-                ◀
-              </AppText>
-            </TouchableOpacity>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
 
-            <View style={{ flex: 1 }}>
-              <AppText variant="h1" style={styles.title}>
-                Top up
-              </AppText>
-              <AppText variant="caption" style={styles.subtitle}>
-                Add funds to your wallet
-              </AppText>
-            </View>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: 16 + topSpacer }]}>
+        <TouchableOpacity style={styles.cancelBtn} onPress={() => nav.goBack()} activeOpacity={0.8}>
+          <Text style={styles.cancelText}>Cancel</Text>
+        </TouchableOpacity>
 
-            <View style={styles.balanceWrap}>
-              <AppText variant="caption" style={{ color: colors.textSecondary }}>
-                Balance
-              </AppText>
-              <AppText variant="body">{balance !== null ? formatCurrency(balance) : "—"}</AppText>
-            </View>
-          </View>
+        <Text style={styles.headerTitle}>Top Up</Text>
+        <View style={{ width: 60 }} />
+      </View>
 
-          {/* Amount */}
-          <View style={styles.section}>
-            <AppText variant="caption" style={styles.sectionLabel}>
-              Amount
-            </AppText>
-            <Input placeholder="0.00" value={amountRaw} onChangeText={setAmountRaw} keyboardType="numeric" isCurrency currency="USD" />
-            <View style={{ height: 8 }} />
-            <View style={styles.presetRow}>
-              {presets.map((p) => (
-                <TouchableOpacity
-                  key={p}
-                  style={[styles.presetBtn, numericValueFromRaw(amountRaw) === p && styles.presetBtnActive]}
-                  onPress={() => pickPreset(p)}
-                  accessibilityRole="button"
-                >
-                  <AppText variant="button" style={numericValueFromRaw(amountRaw) === p ? { color: "#fff" } : undefined}>
-                    {formatCurrency(p)}
-                  </AppText>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <AppText variant="caption" style={{ color: colors.textSecondary, marginTop: 8 }}>
-              Fee estimate: {formatCurrency(fee)} • Total: {formatCurrency(total)}
-            </AppText>
-          </View>
+      {/* Content */}
+      <View style={styles.content}>
+        <View style={styles.balanceWrap}>
+          <Text style={styles.balanceText}>Current Balance: {formatMoney(balance)}</Text>
+        </View>
 
-          {/* Method */}
-          <View style={styles.section}>
-            <AppText variant="caption" style={styles.sectionLabel}>
-              Payment method
-            </AppText>
-            <View style={styles.methodRow}>
-              <TouchableOpacity style={[styles.methodCard, method === "card" && styles.methodCardActive]} onPress={() => selectMethod("card")} accessibilityRole="button">
-                <AppText variant="body">Card</AppText>
-                <AppText variant="caption" style={{ color: colors.textSecondary }}>
-                  Visa •••• 4242
-                </AppText>
-              </TouchableOpacity>
+        {/* Big amount */}
+        <View style={styles.amountRow}>
+          <Text style={styles.currency}>$</Text>
+          <Text style={styles.amountWhole}>{dollars}</Text>
+          <Text style={styles.amountCents}>{cents}</Text>
+          <View style={styles.caret} />
+        </View>
 
-              <TouchableOpacity style={[styles.methodCard, method === "bank" && styles.methodCardActive]} onPress={() => selectMethod("bank")} accessibilityRole="button">
-                <AppText variant="body">Bank</AppText>
-                <AppText variant="caption" style={{ color: colors.textSecondary }}>
-                  Bank transfer
-                </AppText>
-              </TouchableOpacity>
+        {/* Presets */}
+        <View style={styles.pillsRow}>
+          <TouchableOpacity style={[styles.pill, styles.pillActive]} onPress={() => setPreset(50)} activeOpacity={0.9}>
+            <Text style={styles.pillTextActive}>+$50</Text>
+          </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.methodCard, method === "ussd" && styles.methodCardActive]} onPress={() => selectMethod("ussd")} accessibilityRole="button">
-                <AppText variant="body">USSD</AppText>
-                <AppText variant="caption" style={{ color: colors.textSecondary }}>
-                  Mobile banking
-                </AppText>
-              </TouchableOpacity>
-            </View>
-          </View>
+          <TouchableOpacity style={styles.pill} onPress={() => setPreset(10)} activeOpacity={0.9}>
+            <Text style={styles.pillText}>+$10</Text>
+          </TouchableOpacity>
 
-          {/* Note */}
-          <View style={styles.section}>
-            <AppText variant="caption" style={styles.sectionLabel}>
-              Reference (optional)
-            </AppText>
-            <Input placeholder="Reference or note" value={note} onChangeText={setNote} />
-          </View>
+          <TouchableOpacity style={styles.pill} onPress={() => setPreset(20)} activeOpacity={0.9}>
+            <Text style={styles.pillText}>+$20</Text>
+          </TouchableOpacity>
 
-          {/* CTA */}
-          <View style={styles.ctaRow}>
-            <Button title="Continue" variant="primary" onPress={onContinue} loading={loading} />
-            <View style={{ height: 10 }} />
-            <Button title="Cancel" variant="secondary" onPress={() => nav.goBack()} />
-          </View>
-        </Animated.View>
-      </KeyboardAvoidingView>
+          <TouchableOpacity style={styles.pill} onPress={() => setPreset(100)} activeOpacity={0.9}>
+            <Text style={styles.pillText}>+$100</Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* SUMMARY MODAL */}
-      <Modal visible={showSummary} transparent onRequestClose={() => closeSummary()}>
-        <View style={styles.modalBackdrop}>
-          <Animated.View
-            style={[
-              styles.modalCard,
-              {
-                opacity: summaryAnim,
-                transform: [
-                  { scale: summaryAnim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) },
-                  { translateY: summaryAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) },
-                ],
-              },
-            ]}
+        {/* FROM selector */}
+        <View style={{ width: "100%", marginTop: 14 }}>
+          <TouchableOpacity
+            style={styles.fromRow}
+            activeOpacity={0.85}
+            onPress={() => setShowSourceModal(true)}
           >
-            <AppText variant="h2">Top up summary</AppText>
-            <View style={{ height: 12 }} />
-            <View style={styles.summaryRow}>
-              <AppText variant="caption">Amount</AppText>
-              <AppText variant="caption">{formatCurrency(amount)}</AppText>
-            </View>
-            <View style={styles.summaryRow}>
-              <AppText variant="caption">Fee</AppText>
-              <AppText variant="caption">{formatCurrency(fee)}</AppText>
-            </View>
-            <View style={styles.summaryRow}>
-              <AppText variant="caption">Total</AppText>
-              <AppText variant="caption">{formatCurrency(total)}</AppText>
-            </View>
-            <View style={styles.summaryRow}>
-              <AppText variant="caption">Method</AppText>
-              <AppText variant="caption">{method.toUpperCase()}</AppText>
-            </View>
-            {note ? (
-              <View style={{ marginTop: 10 }}>
-                <AppText variant="caption">Reference</AppText>
-                <AppText variant="caption" style={{ color: colors.textSecondary }}>
-                  {note}
-                </AppText>
+            <View style={styles.fromLeft}>
+              {/* card preview block */}
+              <LinearGradient
+                colors={["#3b82f6", "#1e40af"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.fromIcon}
+              >
+                <View style={styles.cardDots1} />
+                <View style={styles.cardDots2} />
+              </LinearGradient>
+
+              <View>
+                <Text style={styles.fromLabel}>FROM</Text>
+                <Text style={styles.fromValue}>
+                  {selectedSource.label} {selectedSource.detail ? ` ${selectedSource.detail}` : ""}
+                </Text>
+                {!!selectedSource.subtitle && <Text style={styles.fromSub}>{selectedSource.subtitle}</Text>}
               </View>
-            ) : null}
-
-            <View style={{ height: 18 }} />
-            <Button title="Confirm & Enter PIN" variant="primary" onPress={onSummaryConfirm} />
-            <View style={{ height: 12 }} />
-            <Button title="Cancel" variant="secondary" onPress={() => closeSummary()} />
-          </Animated.View>
-        </View>
-      </Modal>
-
-      {/* PIN MODAL */}
-      <Modal visible={showPin} transparent onRequestClose={() => closePin()}>
-        <View style={styles.modalBackdrop}>
-          <Animated.View
-            style={[
-              styles.pinCard,
-              {
-                opacity: pinAnim,
-                transform: [
-                  { scale: pinAnim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) },
-                  { translateY: pinAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) },
-                ],
-              },
-            ]}
-          >
-            <AppText variant="h2">Enter PIN</AppText>
-            <AppText variant="caption" style={{ color: colors.textSecondary, marginTop: 8 }}>
-              Enter your 4-digit PIN to authorize the top-up
-            </AppText>
-
-            <View style={styles.pinRow}>
-              {pin.map((p, i) => (
-                <TextInput
-                  key={i}
-                  ref={(r) => (pinInputs[i].current = r)}
-                  value={p}
-                  keyboardType="number-pad"
-                  maxLength={1}
-                  onChangeText={(v) => onPinChange(i, v)}
-                  style={styles.pinBox}
-                  secureTextEntry
-                  returnKeyType={i === 3 ? "done" : "next"}
-                  textContentType="oneTimeCode"
-                />
-              ))}
             </View>
 
-            <View style={{ height: 12 }} />
-            <Button title="Top up" variant="primary" onPress={handleTopUp} loading={loading} />
-            <View style={{ height: 12 }} />
-            <Button title="Cancel" variant="secondary" onPress={() => closePin(() => openSummary())} />
-          </Animated.View>
+            <MaterialIcons name="expand-more" size={26} color={COLORS.slate} />
+          </TouchableOpacity>
         </View>
-      </Modal>
+      </View>
 
-      {/* RESULT MODAL */}
-      <Modal visible={showResult} transparent onRequestClose={() => closeResult()}>
-        <View style={styles.modalBackdrop}>
-          <Animated.View
-            style={[
-              styles.modalCard,
-              {
-                opacity: resultAnim,
-                transform: [
-                  { scale: resultAnim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) },
-                  { translateY: resultAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) },
-                ],
-              },
-            ]}
-          >
-            {resultSuccess ? (
-              <>
-                <View style={{ alignItems: "center", marginBottom: 8 }}>
-                  <Text style={{ fontSize: 36 }}>✅</Text>
-                </View>
-                <AppText variant="h2">Top-up successful</AppText>
-                <AppText variant="caption" style={{ color: colors.textSecondary, marginTop: 6 }}>
-                  Your wallet has been topped up.
-                </AppText>
-
-                <View style={{ height: 12 }} />
-                <View style={styles.summaryRow}>
-                  <AppText variant="caption">Amount</AppText>
-                  <AppText variant="caption">{lastTx ? formatCurrency(lastTx.amount) : formatCurrency(amount)}</AppText>
-                </View>
-                <View style={styles.summaryRow}>
-                  <AppText variant="caption">Fee</AppText>
-                  <AppText variant="caption">{lastTx ? formatCurrency(lastTx.fee) : formatCurrency(fee)}</AppText>
-                </View>
-
-                <View style={{ height: 18 }} />
-                <Button title="Download receipt" variant="primary" onPress={onDownloadReceipt} />
-                <View style={{ height: 12 }} />
-                <Button
-                  title="Done"
-                  variant="secondary"
-                  onPress={() => {
-                    closeResult(() => {
-                      // reset form and ensure balance is refreshed
-                      setAmountRaw("");
-                      setNote("Top up wallet");
-                      setMethod("card");
-                      setLastTx(null);
-                      refresh();
-                    });
-                  }}
-                />
-              </>
-            ) : (
-              <>
-                <View style={{ alignItems: "center", marginBottom: 8 }}>
-                  <Text style={{ fontSize: 36 }}>❌</Text>
-                </View>
-                <AppText variant="h2">Top-up failed</AppText>
-                <AppText variant="caption" style={{ color: colors.textSecondary, marginTop: 6 }}>
-                  Something went wrong. Try again or contact support.
-                </AppText>
-
-                <View style={{ height: 18 }} />
-                <Button
-                  title="Retry"
-                  variant="primary"
-                  onPress={() => {
-                    closeResult(() => {
-                      setTimeout(() => openSummary(), 120);
-                    });
-                  }}
-                />
-                <View style={{ height: 12 }} />
-                <Button title="Close" variant="secondary" onPress={() => closeResult()} />
-              </>
-            )}
-          </Animated.View>
+      {/* Bottom panel: CTA + keypad */}
+      <View style={styles.bottomPanel}>
+        <View style={styles.ctaWrap}>
+          <TouchableOpacity style={styles.ctaBtn} onPress={addFunds} activeOpacity={0.92}>
+            <LinearGradient
+              colors={[COLORS.primary, COLORS.primaryDark]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.ctaGradient}
+            >
+              <Text style={styles.ctaText}>Add Funds</Text>
+              <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
+
+        <View style={styles.keypad}>
+          {["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "back"].map((k) => {
+            const isBack = k === "back";
+            return (
+              <TouchableOpacity key={k} style={styles.key} onPress={() => onKeyPress(k)} activeOpacity={0.75}>
+                {isBack ? (
+                  <MaterialIcons name="backspace" size={26} color="#fff" />
+                ) : (
+                  <Text style={styles.keyText}>{k}</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Funding source modal */}
+      <Modal
+        visible={showSourceModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSourceModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.sheetBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowSourceModal(false)}
+        >
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>Choose funding source</Text>
+
+            {FUNDING_SOURCES.map((src) => {
+              const active = src.id === selectedSource.id;
+              return (
+                <TouchableOpacity
+                  key={src.id}
+                  style={[styles.sourceItem, active && styles.sourceItemActive]}
+                  onPress={() => pickSource(src)}
+                  activeOpacity={0.85}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sourceTitle}>
+                      {src.label} {src.detail ? ` ${src.detail}` : ""}
+                    </Text>
+                    {!!src.subtitle && <Text style={styles.sourceSub}>{src.subtitle}</Text>}
+                  </View>
+
+                  {active ? (
+                    <MaterialIcons name="check-circle" size={22} color="#4ade80" />
+                  ) : (
+                    <MaterialIcons name="radio-button-unchecked" size={22} color="rgba(255,255,255,0.25)" />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  container: {
-    padding: spacing.md,
-    paddingBottom: 28,
-  },
-  headerRow: {
+  root: { flex: 1, backgroundColor: COLORS.bg },
+
+  header: {
+    paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: spacing.md,
+    justifyContent: "space-between",
+    paddingBottom: 8,
   },
-  backBtn: {
-    padding: 6,
-    marginRight: 6,
+  cancelBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 8,
   },
-  title: {
-    color: colors.textPrimary,
-    marginBottom: 2,
+  cancelText: {
+    color: "rgba(148,163,184,0.9)",
+    fontSize: 15,
+    fontWeight: "600",
   },
-  subtitle: {
-    color: colors.textSecondary,
-    marginBottom: 2,
+  headerTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+  },
+
+  content: {
+    flex: 1,
+    paddingHorizontal: 16,
+    alignItems: "center",
   },
   balanceWrap: {
-    alignItems: "flex-end",
-    marginLeft: 12,
-  },
-
-  section: {
-    marginTop: spacing.md,
-  },
-  sectionLabel: {
-    marginBottom: 8,
-    color: colors.textSecondary,
-  },
-
-  presetRow: {
-    flexDirection: "row",
-    marginTop: spacing.sm,
-    gap: 10,
-    flexWrap: "wrap",
-  },
-  presetBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 9999,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: 8,
-    marginBottom: 6,
-  },
-  presetBtnActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-
-  methodRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-    marginTop: spacing.sm,
-  },
-  methodCard: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    padding: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "flex-start",
-    justifyContent: "center",
-    marginHorizontal: 4,
-  },
-  methodCardActive: {
-    borderColor: colors.primary,
-    backgroundColor: "rgba(111,23,255,0.06)",
-  },
-
-  ctaRow: {
-    marginTop: spacing.lg,
-  },
-
-  /* modals */
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(16,16,24,0.48)",
+    marginTop: 12,
     alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.md,
   },
-  modalCard: {
-    width: "100%",
-    maxWidth: 520,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    elevation: 24,
+  balanceText: {
+    color: COLORS.slate,
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
 
-  summaryRow: {
+  amountRow: {
+    marginTop: 26,
+    marginBottom: 14,
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  currency: {
+    fontSize: 36,
+    color: "rgba(255,255,255,0.35)",
+    fontWeight: "900",
+    marginRight: 6,
+    marginBottom: 10,
+  },
+  amountWhole: {
+    fontSize: 72,
+    color: "#fff",
+    fontWeight: "900",
+    letterSpacing: -2,
+    lineHeight: 80,
+  },
+  amountCents: {
+    fontSize: 34,
+    color: "rgba(255,255,255,0.55)",
+    fontWeight: "900",
+    marginBottom: 14,
+    marginLeft: 4,
+  },
+  caret: {
+    width: 4,
+    height: 44,
+    backgroundColor: COLORS.primary,
+    borderRadius: 999,
+    marginLeft: 8,
+    marginBottom: 16,
+    opacity: 0.95,
+  },
+
+  pillsRow: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 12,
     marginTop: 8,
   },
-
-  pinCard: {
-    width: "100%",
-    maxWidth: 420,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    elevation: 24,
-    alignItems: "center",
-  },
-  pinRow: {
-    flexDirection: "row",
-    marginTop: 12,
-    gap: 10,
-  },
-  pinBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    textAlign: "center",
-    fontSize: 24,
+  pill: {
+    height: 40,
+    minWidth: 80,
+    borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    padding: 0,
+    backgroundColor: COLORS.surface2,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+    paddingHorizontal: 18,
+  },
+  pillActive: {
+    backgroundColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
+    borderColor: "rgba(255,255,255,0)",
+  },
+  pillText: { color: "#fff", fontSize: 13, fontWeight: "900" },
+  pillTextActive: { color: "#fff", fontSize: 13, fontWeight: "900" },
+
+  fromRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  fromLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  fromIcon: {
+    height: 40,
+    width: 56,
+    borderRadius: 12,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardDots1: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    height: 8,
+    width: 8,
+    borderRadius: 99,
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  cardDots2: {
+    position: "absolute",
+    top: 10,
+    right: 22,
+    height: 8,
+    width: 8,
+    borderRadius: 99,
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  fromLabel: {
+    color: "rgba(146,164,201,0.9)",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+  },
+  fromValue: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "900",
+    marginTop: 2,
+  },
+  fromSub: {
+    color: "rgba(146,164,201,0.9)",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+
+  bottomPanel: {
+    backgroundColor: COLORS.bg,
+    paddingBottom: 18,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+    shadowColor: "#000",
+    shadowOpacity: 0.4,
+    shadowRadius: 30,
+    shadowOffset: { width: 0, height: -10 },
+    elevation: 18,
+  },
+  ctaWrap: {
+    paddingHorizontal: 16,
+    marginTop: -18,
+    marginBottom: 10,
+  },
+  ctaBtn: {
+    height: 56,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  ctaGradient: {
+    flex: 1,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 10,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  ctaText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  keypad: {
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 10,
+  },
+  key: {
+    width: "30%",
+    height: 56,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  keyText: {
+    color: "#fff",
+    fontSize: 26,
+    fontWeight: "700",
+  },
+
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: COLORS.overlay,
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: COLORS.bg,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 18,
+    paddingBottom: 24,
+    borderTopWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  sheetTitle: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "900",
+    marginBottom: 12,
+  },
+  sourceItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    backgroundColor: "rgba(28,37,51,0.75)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    marginBottom: 10,
+  },
+  sourceItemActive: {
+    borderColor: "rgba(19,91,236,0.7)",
+    backgroundColor: "rgba(19,91,236,0.12)",
+  },
+  sourceTitle: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  sourceSub: {
+    color: "rgba(146,164,201,0.9)",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 2,
   },
 });

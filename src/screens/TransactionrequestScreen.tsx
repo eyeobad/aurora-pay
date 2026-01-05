@@ -50,7 +50,7 @@ const RECENTS: RecentPerson[] = [
   { id: "david", name: "David", fullName: "David Park", initials: "DP" },
 ];
 
-export default function TransactionScreen() {
+export default function TransactionrequestScreen() {
   const nav = useNavigation<any>();
   const { state, send, refresh } = useApp();
 
@@ -225,14 +225,14 @@ export default function TransactionScreen() {
           <MaterialIcons name="arrow-back-ios-new" size={22} color="#fff" />
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>Send Money</Text>
+        <Text style={styles.headerTitle}>From Money</Text>
         <View style={{ width: 40 }} />
       </View>
 
       {/* Scroll content */}
       <View style={styles.content}>
         {/* To */}
-        <Text style={styles.label}>To</Text>
+        <Text style={styles.label}>From</Text>
         <View style={styles.searchBar}>
           <MaterialIcons name="search" size={20} color="rgba(255,255,255,0.35)" />
           <TextInput
@@ -336,7 +336,7 @@ export default function TransactionScreen() {
               end={{ x: 1, y: 1 }}
               style={styles.sendGradient}
             >
-              <Text style={styles.sendText}>Send</Text>
+              <Text style={styles.sendText}>Request</Text>
               <Text style={styles.sendAmount}>{formatMoney(amount)}</Text>
               <MaterialIcons name="arrow-forward" size={18} color="#fff" />
             </LinearGradient>

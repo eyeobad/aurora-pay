@@ -39,7 +39,7 @@ const COLORS = {
 
 const quickActions = [
   { key: "send", label: "Send", icon: "send", route: "Transaction" },
-  { key: "request", label: "Request", icon: "cash-sync", route: "Transaction" },
+  { key: "request", label: "Request", icon: "cash-sync", route: "request" },
   { key: "topup", label: "Top Up", icon: "credit-card-plus", route: "TopUp" },
   { key: "more", label: "More", icon: "view-grid", route: "History" },
 ];
