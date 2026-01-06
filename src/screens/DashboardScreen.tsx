@@ -15,6 +15,7 @@ import {
 import { useNavigation, useIsFocused } from "@react-navigation/native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import FloatingNavBar, { FloatingNavItem } from "../components/organisms/FloatingNavBar";
 import { useApp } from "../context/AppContext";
 import { AppText } from "../components";
 
@@ -37,11 +38,13 @@ const COLORS = {
   emerald: "#4ade80",
 };
 
+const NAV_H = 72;
+
 const quickActions = [
   { key: "send", label: "Send", icon: "send", route: "Transaction" },
   { key: "request", label: "Request", icon: "cash-sync", route: "request" },
   { key: "topup", label: "Top Up", icon: "credit-card-plus", route: "TopUp" },
-  { key: "more", label: "More", icon: "view-grid", route: "History" },
+  { key: "more", label: "More", icon: "view-grid", route: "PayBills" },
 ];
 
 const items = [
@@ -146,8 +149,6 @@ export default function DashboardScreen() {
 
   const onRefresh = () => refresh().catch(() => {});
 
-  // ✅ UPDATE: if you have real transactions, use them.
-  // ✅ Otherwise fall back to your static `items` so UI always shows something.
   const recentTxs = useMemo(() => {
     if (transactions.length > 0) {
       return transactions.slice(0, 6).map((tx) => ({
@@ -156,9 +157,12 @@ export default function DashboardScreen() {
         subtitle: `${tx.type.charAt(0).toUpperCase() + tx.type.slice(1)} • ${new Date(
           tx.createdAt
         ).toLocaleDateString()}`,
-        amount: tx.type === "send" ? `-$${Number(tx.amount).toFixed(2)}` : `+$${Number(tx.amount).toFixed(2)}`,
+        amount:
+          tx.type === "send"
+            ? `-$${Number(tx.amount).toFixed(2)}`
+            : `+$${Number(tx.amount).toFixed(2)}`,
         status: tx.type,
-        icon: tx.type === "send" ? "laptop" : "person", // safe default
+        icon: tx.type === "send" ? "laptop" : "person",
       }));
     }
     return items;
@@ -281,7 +285,6 @@ export default function DashboardScreen() {
             </View>
           </>
         }
-        // ✅ UPDATE: use item.icon + amount color matches your data
         renderItem={({ item }) => (
           <View style={styles.txOuter}>
             <View style={styles.txRow}>
@@ -306,61 +309,26 @@ export default function DashboardScreen() {
         )}
       />
 
-      {/* Floating Bottom Nav */}
-      <View style={styles.bottomWrap} pointerEvents="box-none">
-        {/* ✅ removed border as requested */}
-        <View style={styles.bottomNav}>
-          <TouchableOpacity
-            style={styles.navItemActive}
-            accessibilityRole="button"
-            onPress={() => navigation.navigate("Dashboard")}
-          >
-            <MaterialIcons name="home" size={29} color={COLORS.primary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.navItem} accessibilityRole="button" onPress={() => navigation.navigate("MyCards")}>
-            <MaterialCommunityIcons name="credit-card" size={27} color={COLORS.slate400} />
-          </TouchableOpacity>
-
-          {/* ✅ FAB: blur look without using reanimated; no border */}
-          <TouchableOpacity
-            style={styles.fab}
-            accessibilityRole="button"
-            onPress={() => navigation.navigate("Scanner")}
-          >
-            <LinearGradient
-              colors={[COLORS.primary, COLORS.primaryDark]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.fabGradient}
-              
-            >
-              <MaterialCommunityIcons name="qrcode-scan" size={28} color="#fff" />
-            </LinearGradient>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            accessibilityRole="button"
-            onPress={() => navigation.navigate("History")}
-          >
-            <MaterialIcons name="history" size={29} color={COLORS.slate400} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            accessibilityRole="button"
-            onPress={() => navigation.navigate("request")}
-          >
-            <MaterialIcons name="settings" size={28} color={COLORS.slate400} />
-          </TouchableOpacity>
-        </View>
-      </View>
+      {/* ✅ FloatingNavBar with blur + centered scanner */}
+      <FloatingNavBar
+        activeKey="home"
+        primary={COLORS.primary}
+        background="rgba(25,34,51,0.92)"
+        fab={{
+          icon: "qrcode-scan",
+          pack: "mci",
+          onPress: () => navigation.navigate("Scanner"),
+        }}
+        items={[
+          { key: "home", icon: "home", pack: "mi", onPress: () => navigation.navigate("Dashboard") } as FloatingNavItem,
+          { key: "cards", icon: "credit-card", pack: "mci", onPress: () => navigation.navigate("MyCards") } as FloatingNavItem,
+          { key: "history", icon: "history", pack: "mi", onPress: () => navigation.navigate("History") } as FloatingNavItem,
+          { key: "settings", icon: "settings", pack: "mi", onPress: () => navigation.navigate("request") } as FloatingNavItem,
+        ]}
+      />
     </SafeAreaView>
   );
 }
-
-const NAV_H = 72;
 
 const styles = StyleSheet.create({
   root: {
@@ -387,7 +355,6 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 999,
     overflow: "hidden",
-    // ✅ keep your original here
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     backgroundColor: COLORS.surfaceDark,
@@ -400,7 +367,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 999,
-    // ✅ keep your original here
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     backgroundColor: COLORS.slate900,
@@ -408,6 +374,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
+  // ✅ IMPORTANT: leave space for floating nav
   listContent: {
     paddingBottom: NAV_H + 64,
   },
@@ -605,7 +572,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    // ✅ default; overridden per-item
     backgroundColor: "#1e1b4c",
   },
   txTitle: {
@@ -628,67 +594,5 @@ const styles = StyleSheet.create({
   },
   amountNeg: {
     color: "#fff",
-  },
-
-  bottomWrap: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 24,
-    paddingBottom: Platform.OS === "ios" ? 22 : 18,
-    paddingTop: 10,
-  },
-  bottomNav: {
-    height: NAV_H,
-    borderRadius: 999,
-    // ✅ NO BORDER (you said: "i dont want any border")
-    borderWidth: 0,
-    borderColor: "transparent",
-    backgroundColor: "rgba(25,34,51,0.92)",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-around",
-    shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 10,
-  },
-  navItem: {
-    width: 52,
-    height: 52,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  navItemActive: {
-    width: 64,
-    height: 60,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 2,
-  },
-
-  fab: {
-    width: 56,
-    height: 56,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: -26,
-    shadowColor: COLORS.primary,
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 12,
-    overflow: "hidden", // ✅ makes gradient clip perfectly
-  },
-  fabGradient: {
-    width: "100%",
-    height: "100%",
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

@@ -22,6 +22,7 @@ import TopUpScreen from "./src/screens/TopUpScreen";
 import ScannerScreen from "./src/screens/ScannerScreen";
 import TransactionrequestScreen from "./src/screens/TransactionrequestScreen";
 import MyCardsScreen from "./src/screens/MyCardsScreen";
+import PayBillsScreen from "./src/screens/PayBillsScreen";
 const Stack = createNativeStackNavigator();
 
 Notifications.setNotificationHandler({
@@ -64,6 +65,7 @@ export default function App() {
             <Stack.Screen name="Scanner" component={ScannerScreen} />
             <Stack.Screen name="request" component={TransactionrequestScreen} />
             <Stack.Screen name="MyCards" component={MyCardsScreen} />
+            <Stack.Screen name="PayBills" component={PayBillsScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>

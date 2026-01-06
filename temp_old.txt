@@ -1,0 +1,53 @@
+
+      {/* Floating Bottom Nav */}
+      <View style={styles.bottomWrap} pointerEvents="box-none">
+        {/* ✅ removed border as requested */}
+        <View style={styles.bottomNav}>
+          <TouchableOpacity
+            style={styles.navItemActive}
+            accessibilityRole="button"
+            onPress={() => navigation.navigate("Dashboard")}
+          >
+            <MaterialIcons name="home" size={29} color={COLORS.primary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.navItem} accessibilityRole="button" onPress={() => navigation.navigate("MyCards")}>
+            <MaterialCommunityIcons name="credit-card" size={27} color={COLORS.slate400} />
+          </TouchableOpacity>
+
+          {/* ✅ FAB: blur look without using reanimated; no border */}
+          <TouchableOpacity
+            style={styles.fab}
+            accessibilityRole="button"
+            onPress={() => navigation.navigate("Scanner")}
+          >
+            <LinearGradient
+              colors={[COLORS.primary, COLORS.primaryDark]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.fabGradient}
+              
+            >
+              <MaterialCommunityIcons name="qrcode-scan" size={28} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.navItem}
+            accessibilityRole="button"
+            onPress={() => navigation.navigate("History")}
+          >
+            <MaterialIcons name="history" size={29} color={COLORS.slate400} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.navItem}
+            accessibilityRole="button"
+            onPress={() => navigation.navigate("request")}
+          >
+            <MaterialIcons name="settings" size={28} color={COLORS.slate400} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </SafeAreaView>
+
