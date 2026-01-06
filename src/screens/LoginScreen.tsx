@@ -13,6 +13,7 @@ import {
   ScrollView,
   Animated,
   Dimensions,
+  Alert,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -243,7 +244,10 @@ export default function LoginScreen() {
               </View>
 
               {/* Forgot password link */}
-              <TouchableOpacity style={styles.forgotContainer} onPress={() => navigation.navigate("ForgotPassword")}>
+              <TouchableOpacity
+                style={styles.forgotContainer}
+                onPress={() => Alert.alert("Forgot Password", "Password reset is coming soon.")}
+              >
                 <Text style={styles.forgotText}>Forgot Password?</Text>
               </TouchableOpacity>
 

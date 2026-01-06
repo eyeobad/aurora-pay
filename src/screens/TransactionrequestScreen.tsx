@@ -52,7 +52,7 @@ const RECENTS: RecentPerson[] = [
 
 export default function TransactionrequestScreen() {
   const nav = useNavigation<any>();
-  const { state, send, refresh } = useApp();
+  const { state, request, refresh } = useApp();
 
   const balance = state.balance ?? 0;
 
@@ -166,7 +166,6 @@ export default function TransactionrequestScreen() {
   const validate = () => {
     if (!selected && !toQuery.trim()) return "Please enter a recipient or pick from recent.";
     if (amount <= 0) return "Enter an amount greater than 0.";
-    if (amount > balance) return "Insufficient wallet balance.";
     return null;
   };
 
@@ -191,9 +190,8 @@ export default function TransactionrequestScreen() {
     try {
       await hapticSuccess();
 
-      await send({
+      await request({
         amount,
-        fee: 0,
         counterparty: selected?.fullName || toQuery.trim(),
         note: note.trim(),
       });

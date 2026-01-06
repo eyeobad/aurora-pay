@@ -185,7 +185,7 @@ export default function DashboardScreen() {
               Good Morning
             </AppText>
             <AppText variant="h3" style={{ color: COLORS.white }}>
-              Alex 👋
+              {state.user?.name ?? "there"}
             </AppText>
           </View>
         </View>
@@ -310,16 +310,24 @@ export default function DashboardScreen() {
       <View style={styles.bottomWrap} pointerEvents="box-none">
         {/* ✅ removed border as requested */}
         <View style={styles.bottomNav}>
-          <TouchableOpacity style={styles.navItemActive} accessibilityRole="button">
+          <TouchableOpacity
+            style={styles.navItemActive}
+            accessibilityRole="button"
+            onPress={() => navigation.navigate("Dashboard")}
+          >
             <MaterialIcons name="home" size={29} color={COLORS.primary} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.navItem} accessibilityRole="button">
+          <TouchableOpacity style={styles.navItem} accessibilityRole="button" onPress={() => navigation.navigate("MyCards")}>
             <MaterialCommunityIcons name="credit-card" size={27} color={COLORS.slate400} />
           </TouchableOpacity>
 
           {/* ✅ FAB: blur look without using reanimated; no border */}
-          <TouchableOpacity style={styles.fab} accessibilityRole="button"onPress={() => navigation.navigate("Scanner")}>
+          <TouchableOpacity
+            style={styles.fab}
+            accessibilityRole="button"
+            onPress={() => navigation.navigate("Scanner")}
+          >
             <LinearGradient
               colors={[COLORS.primary, COLORS.primaryDark]}
               start={{ x: 0, y: 0 }}
@@ -331,11 +339,19 @@ export default function DashboardScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.navItem} accessibilityRole="button">
+          <TouchableOpacity
+            style={styles.navItem}
+            accessibilityRole="button"
+            onPress={() => navigation.navigate("History")}
+          >
             <MaterialIcons name="history" size={29} color={COLORS.slate400} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.navItem} accessibilityRole="button">
+          <TouchableOpacity
+            style={styles.navItem}
+            accessibilityRole="button"
+            onPress={() => navigation.navigate("request")}
+          >
             <MaterialIcons name="settings" size={28} color={COLORS.slate400} />
           </TouchableOpacity>
         </View>
