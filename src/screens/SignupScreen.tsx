@@ -9,7 +9,6 @@ import {
   StatusBar,
   Platform,
   KeyboardAvoidingView,
-  Alert,
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
@@ -19,6 +18,7 @@ import { BlurView } from "expo-blur";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useApp } from "../context/AppContext";
+import { notifyLocal } from "../lib/notifications";
 
 const GoogleLogo = () => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
@@ -119,7 +119,7 @@ export default function SignupScreen() {
   const handleSignup = async () => {
     const error = validate();
     if (error) {
-      Alert.alert("Validation", error);
+      await notifyLocal("Validation", error);
       return;
     }
     setLoading(true);
@@ -132,7 +132,7 @@ export default function SignupScreen() {
         })
       );
     } catch (e: any) {
-      Alert.alert("Signup failed", e?.message ?? "Unable to create account.");
+      await notifyLocal("Signup failed", e?.message ?? "Unable to create account.");
     } finally {
       setLoading(false);
     }
@@ -296,14 +296,14 @@ export default function SignupScreen() {
                   I agree to the{" "}
                   <Text
                     style={{ color: theme.primary, textDecorationLine: "underline" }}
-                    onPress={() => navigation.navigate("Terms" as any)}
+                    onPress={() => notifyLocal("Terms", "Terms and Conditions are coming soon.")}
                   >
                     Terms &amp; Conditions
                   </Text>{" "}
                   and{" "}
                   <Text
                     style={{ color: theme.primary, textDecorationLine: "underline" }}
-                    onPress={() => navigation.navigate("Privacy" as any)}
+                    onPress={() => notifyLocal("Privacy", "Privacy Policy is coming soon.")}
                   >
                     Privacy Policy
                   </Text>

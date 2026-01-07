@@ -1,5 +1,5 @@
 // src/screens/PayBillsScreen.tsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   View,
   SafeAreaView,
@@ -13,10 +13,13 @@ import {
   TextInput,
   Dimensions,
   Platform,
+  Modal,
 } from "react-native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import FloatingNavBar, { FloatingNavItem } from "../components/organisms/FloatingNavBar";
 import { useNavigation } from "@react-navigation/native";
+import { useApp } from "../context/AppContext";
+import { notifyLocal } from "../lib/notifications";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const MAX_W = 420;
@@ -54,6 +57,22 @@ const NAV_H = 72;
 export default function PayBillsScreen() {
   const navigation = useNavigation<Nav>();
   const [query, setQuery] = useState("");
+  const { state, send, refresh, confirmBiometric } = useApp();
+  const [payOpen, setPayOpen] = useState(false);
+  const [payAmount, setPayAmount] = useState("");
+  const [payNote, setPayNote] = useState("");
+  const [paying, setPaying] = useState(false);
+  const [selectedBiller, setSelectedBiller] = useState<{ id: string; name: string } | null>(null);
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pin, setPin] = useState(["", "", "", ""]);
+  const pinRefs = [
+    useRef<TextInput | null>(null),
+    useRef<TextInput | null>(null),
+    useRef<TextInput | null>(null),
+    useRef<TextInput | null>(null),
+  ];
+
+  const balance = state.balance ?? 0;
 
   const categories = useMemo(
     () => [
@@ -99,6 +118,34 @@ export default function PayBillsScreen() {
     []
   );
 
+  const fallbackLogos = [
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuDxvxdCMaoDPJV95Vj89V7OsXFB9XyC27uaV8QtoPkYy3jMcahBZsloh5N39s81xpQ44KedIa-9MkcEdCJqwXiVRzWcXwVVz0WjjlDpr61Ilq1rK7V-WKKjkpZFisTbnlY8FKKOmA4HizYIYBs0MEx0HehG9AyVhM1Vy6gyNd2kExBhOe2Nf1i23ugGcMuJalhWLFQ4W7qgpLBQT8HmK_bXG-0T8RcQw4AEI7xsW9UZ9OcS5vfl9weRgvcabZxMWKlhN95ZvSRDXk2I",
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuCo_RLjIcyP2SZNW9MFZkCz1TRwZCVmGO9MneqwPOjaf28-0fMOISkPXAUOUzvBuTEYJufCBEvUuHNl0ZcNbHZ961fABor7y_Xr6vkiFx1OIZqkdY0FE15sXSfSmLA8BcOUc13Qb0DGgyVRAlSRj5b4_lD1jH6ZgxTKY6l3G0Vm9Jz8OSsJFmrWADFbsnsTOP2EJP4JKnZ_zAkYcoHewBnKB3__SjA20jUjXv3RVgqjhB8hTRUkI6e97UUmSGB2nIdF2ue3aViN560a",
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuCUJvVhC9jFc5lJWzWk6ktAARU3mstBtWfbSQRZCs2TuLwGiqiKkmzCndNCnD-x1g0U8bFc-1cssyG4Y6yxU1NolDDmqQ-86ndLZjRElunaKkMkNIE1obiq2AgbDOu-YZtRSx82wkVxNVQkS_P2d3IyvkGbSGZBI5JrxdXk9uQkDOXdNvCfg6g5ozpTQfOcWJApNi9RMhN6umSixY7632f9YiXg5a25alv9BldtJdIm3gqGsHLJ08CouUwPNMLOcgKZjNzww2D62VsQ",
+  ];
+
+  const recentBillers = useMemo(() => {
+    const seen = new Set<string>();
+    const items = (state.transactions ?? [])
+      .filter((t) => t.type === "send" && t.counterparty)
+      .filter((t) => {
+        const key = String(t.counterparty);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 3)
+      .map((t, i) => ({
+        id: `dyn-${t.id}`,
+        name: t.counterparty ?? "Biller",
+        sub: "Recent payment",
+        logo: fallbackLogos[i % fallbackLogos.length],
+        badge: false,
+        iconBg: "rgba(59,130,246,0.18)",
+      }));
+    return items.length ? items : savedBillers;
+  }, [state.transactions, savedBillers]);
+
   const popular = useMemo(
     () => [
       {
@@ -136,6 +183,107 @@ export default function PayBillsScreen() {
     ],
     []
   );
+
+  const filteredSaved = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return recentBillers;
+    return recentBillers.filter((b) => b.name.toLowerCase().includes(q));
+  }, [query, recentBillers]);
+
+  const filteredPopular = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return popular;
+    return popular.filter((b) => b.title.toLowerCase().includes(q));
+  }, [query, popular]);
+
+  const openPay = (name: string) => {
+    setSelectedBiller({ id: name, name });
+    setPayAmount("");
+    setPayNote("");
+    setPayOpen(true);
+  };
+
+  const clearPin = () => {
+    setPin(["", "", "", ""]);
+    setTimeout(() => pinRefs[0].current?.focus(), 60);
+  };
+
+  const onPinChange = (idx: number, v: string) => {
+    const value = v.slice(-1).replace(/[^0-9]/g, "");
+    const next = [...pin];
+    next[idx] = value;
+    setPin(next);
+
+    if (value && idx < 3) pinRefs[idx + 1].current?.focus();
+    if (!value && idx > 0) pinRefs[idx - 1].current?.focus();
+  };
+
+  const validatePayment = () => {
+    const amount = Number(payAmount);
+    if (!selectedBiller || !Number.isFinite(amount) || amount <= 0) {
+      return "Enter a valid payment amount.";
+    }
+    if (amount > balance) {
+      return "Your wallet balance is too low.";
+    }
+    return null;
+  };
+
+  const performPay = async (skipBiometric: boolean) => {
+    const amount = Number(payAmount);
+    if (!selectedBiller || !Number.isFinite(amount) || amount <= 0) {
+      await notifyLocal("Invalid amount", "Enter a valid payment amount.");
+      return;
+    }
+
+    try {
+      setPaying(true);
+      await send({
+        amount,
+        fee: 0,
+        counterparty: selectedBiller.name,
+        note: payNote.trim(),
+        skipBiometric,
+      });
+      await refresh();
+      setPayOpen(false);
+      setPinOpen(false);
+      setSelectedBiller(null);
+      setPayAmount("");
+      setPayNote("");
+    } catch (e: any) {
+      await notifyLocal("Payment failed", e?.message ?? "Unable to process payment.");
+    } finally {
+      setPaying(false);
+      clearPin();
+    }
+  };
+
+  const onPayPress = async () => {
+    const err = validatePayment();
+    if (err) {
+      await notifyLocal("Invalid payment", err);
+      return;
+    }
+
+    const ok = await confirmBiometric("Confirm payment");
+    if (ok) {
+      await performPay(true);
+      return;
+    }
+
+    clearPin();
+    setPinOpen(true);
+  };
+
+  const doPay = async () => {
+    const code = pin.join("");
+    if (code.length !== 4) {
+      await notifyLocal("Invalid PIN", "Enter your 4-digit PIN.");
+      return;
+    }
+    await performPay(true);
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -192,7 +340,11 @@ export default function PayBillsScreen() {
                 const bg = primaryKind ? "rgba(19,91,236,0.20)" : "rgba(255,255,255,0.06)";
                 const fg = primaryKind ? PRIMARY : "#94A3B8";
                 return (
-                  <TouchableOpacity activeOpacity={0.85} style={styles.catBtn}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    style={styles.catBtn}
+                    onPress={() => notifyLocal("Category", `${item.label} billers coming soon.`)}
+                  >
                     <View style={[styles.catCircle, { backgroundColor: bg }]}>
                       <Icon pack={item.icon.pack} name={item.icon.name} size={28} color={fg} />
                     </View>
@@ -212,14 +364,14 @@ export default function PayBillsScreen() {
 
           <View style={styles.savedWrap}>
             <FlatList
-              data={savedBillers}
+              data={filteredSaved}
               horizontal
               keyExtractor={(x) => x.id}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingRight: 18 }}
               ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
               renderItem={({ item }) => (
-                <TouchableOpacity activeOpacity={0.9} style={styles.savedCard}>
+                <TouchableOpacity activeOpacity={0.9} style={styles.savedCard} onPress={() => openPay(item.name)}>
                   {item.badge ? (
                     <View
                       style={[
@@ -249,8 +401,8 @@ export default function PayBillsScreen() {
             <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>Popular Billers</Text>
 
             <View style={{ gap: 10 }}>
-              {popular.map((p) => (
-                <TouchableOpacity key={p.id} activeOpacity={0.85} style={styles.popRow}>
+              {filteredPopular.map((p) => (
+                <TouchableOpacity key={p.id} activeOpacity={0.85} style={styles.popRow} onPress={() => openPay(p.title)}>
                   <View style={styles.popLeft}>
                     <View style={[styles.popIconWrap, { backgroundColor: p.iconBg }]}>
                       <Icon pack={p.icon.pack} name={p.icon.name} size={22} color={p.iconColor} />
@@ -269,11 +421,88 @@ export default function PayBillsScreen() {
               ))}
             </View>
 
-            <TouchableOpacity activeOpacity={0.85} style={styles.seeAllBillersBtn}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.seeAllBillersBtn}
+              onPress={() => notifyLocal("Billers", "Full biller list is coming soon.")}
+            >
               <Text style={styles.seeAllBillersText}>See All Billers</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
+
+        <Modal visible={payOpen} transparent animationType="fade" onRequestClose={() => setPayOpen(false)}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setPayOpen(false)}>
+            <View style={styles.sheet}>
+              <Text style={styles.sheetTitle}>Pay {selectedBiller?.name}</Text>
+              <Text style={styles.sheetSub}>Available: ${balance.toFixed(2)}</Text>
+
+              <View style={styles.sheetInputWrap}>
+                <MaterialIcons name="attach-money" size={20} color="#94A3B8" />
+                <TextInput
+                  value={payAmount}
+                  onChangeText={setPayAmount}
+                  placeholder="0.00"
+                  placeholderTextColor="#64748B"
+                  keyboardType="decimal-pad"
+                  style={styles.sheetInput}
+                />
+              </View>
+
+              <View style={styles.sheetInputWrap}>
+                <MaterialIcons name="notes" size={20} color="#94A3B8" />
+                <TextInput
+                  value={payNote}
+                  onChangeText={setPayNote}
+                  placeholder="Add note (optional)"
+                  placeholderTextColor="#64748B"
+                  style={styles.sheetInput}
+                />
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={[styles.sheetBtn, paying && { opacity: 0.7 }]}
+                onPress={onPayPress}
+                disabled={paying}
+              >
+                <Text style={styles.sheetBtnText}>{paying ? "Processing..." : "Pay Now"}</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        <Modal visible={pinOpen} transparent animationType="fade" onRequestClose={() => setPinOpen(false)}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setPinOpen(false)}>
+            <View style={styles.pinCard}>
+              <Text style={styles.sheetTitle}>Enter PIN</Text>
+              <Text style={styles.pinSub}>Enter your 4-digit PIN to authorize</Text>
+
+              <View style={styles.pinRow}>
+                {pin.map((p, i) => (
+                  <TextInput
+                    key={i}
+                    ref={(r) => (pinRefs[i].current = r)}
+                    value={p}
+                    onChangeText={(v) => onPinChange(i, v)}
+                    keyboardType="number-pad"
+                    maxLength={1}
+                    secureTextEntry
+                    style={styles.pinBox}
+                  />
+                ))}
+              </View>
+
+              <TouchableOpacity style={styles.pinConfirm} onPress={doPay} activeOpacity={0.92}>
+                <Text style={styles.pinConfirmText}>Confirm</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.pinCancel} onPress={() => setPinOpen(false)} activeOpacity={0.85}>
+                <Text style={styles.pinCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
 
         {/* ✅ Floating nav (same as Dashboard style) */}
         <FloatingNavBar
@@ -463,4 +692,90 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   seeAllBillersText: { fontSize: 14, fontWeight: "900", color: PRIMARY },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: BG_DARK,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 18,
+    borderTopWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  sheetTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
+  sheetSub: { marginTop: 6, color: "#94A3B8", fontSize: 12, fontWeight: "700" },
+  sheetInputWrap: {
+    marginTop: 12,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: SURFACE_DARK,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  sheetInput: { flex: 1, color: "#fff", fontSize: 15, fontWeight: "700" },
+  sheetBtn: {
+    marginTop: 16,
+    height: 52,
+    borderRadius: 999,
+    backgroundColor: PRIMARY,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetBtnText: { color: "#fff", fontSize: 15, fontWeight: "900" },
+
+  pinCard: {
+    backgroundColor: BG_DARK,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 18,
+    borderTopWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  pinSub: { marginTop: 6, color: "#94A3B8", fontSize: 12, fontWeight: "700" },
+  pinRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+    marginTop: 12,
+  },
+  pinBox: {
+    flex: 1,
+    height: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: SURFACE_DARK,
+    color: "#fff",
+    textAlign: "center",
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  pinConfirm: {
+    marginTop: 16,
+    height: 48,
+    borderRadius: 999,
+    backgroundColor: PRIMARY,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pinConfirmText: { color: "#fff", fontSize: 15, fontWeight: "900" },
+  pinCancel: {
+    marginTop: 10,
+    height: 46,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: SURFACE_DARK,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  pinCancelText: { color: "#E2E8F0", fontSize: 14, fontWeight: "800" },
 });

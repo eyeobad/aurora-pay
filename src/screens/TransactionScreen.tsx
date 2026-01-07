@@ -1,5 +1,5 @@
 // src/screens/TransactionScreen.tsx
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   SafeAreaView,
   View,
@@ -10,13 +10,13 @@ import {
   TextInput,
   Modal,
   Platform,
-  Alert,
 } from "react-native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { useApp } from "../context/AppContext";
+import { notifyLocal } from "../lib/notifications";
 
 const COLORS = {
   bg: "#101622",
@@ -43,6 +43,11 @@ type RecentPerson = {
   online?: boolean;
 };
 
+type Bank = {
+  id: string;
+  name: string;
+};
+
 const RECENTS: RecentPerson[] = [
   { id: "alice", name: "Alice", fullName: "Alice Johnson", initials: "AJ", online: true },
   { id: "robert", name: "Robert", fullName: "Robert Miles", initials: "RM" },
@@ -50,15 +55,35 @@ const RECENTS: RecentPerson[] = [
   { id: "david", name: "David", fullName: "David Park", initials: "DP" },
 ];
 
+const BANKS: Bank[] = [
+  { id: "chase", name: "Chase Bank" },
+  { id: "boa", name: "Bank of America" },
+  { id: "wells", name: "Wells Fargo" },
+  { id: "citi", name: "Citi Bank" },
+  { id: "usbank", name: "US Bank" },
+];
+
 export default function TransactionScreen() {
   const nav = useNavigation<any>();
-  const { state, send, refresh } = useApp();
+  const route = useRoute<any>();
+  const { state, send, refresh, confirmBiometric } = useApp();
 
   const balance = state.balance ?? 0;
 
   // UI state
   const [toQuery, setToQuery] = useState("");
   const [selected, setSelected] = useState<RecentPerson | null>(null);
+  const prefill = route.params?.accountNumber ?? route.params?.recipient ?? "";
+  const [bankOpen, setBankOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
+
+  useEffect(() => {
+    if (prefill) {
+      setToQuery(prefill);
+      setSelected(null);
+    }
+  }, [prefill]);
 
   // keypad amount
   const [amountStr, setAmountStr] = useState<string>("150"); // matches your screenshot default
@@ -165,29 +190,13 @@ export default function TransactionScreen() {
 
   const validate = () => {
     if (!selected && !toQuery.trim()) return "Please enter a recipient or pick from recent.";
+    if (!selectedBank) return "Select a bank to continue.";
     if (amount <= 0) return "Enter an amount greater than 0.";
     if (amount > balance) return "Insufficient wallet balance.";
     return null;
   };
 
-  const onSendPress = async () => {
-    const err = validate();
-    if (err) {
-      Alert.alert("Validation", err);
-      return;
-    }
-    await hapticLight();
-    clearPin();
-    setPinOpen(true);
-  };
-
-  const doSend = async () => {
-    const code = pin.join("");
-    if (code.length !== 4) {
-      Alert.alert("Invalid PIN", "Enter your 4-digit PIN.");
-      return;
-    }
-
+  const performSend = async (skipBiometric: boolean) => {
     try {
       await hapticSuccess();
 
@@ -196,21 +205,53 @@ export default function TransactionScreen() {
         fee: 0,
         counterparty: selected?.fullName || toQuery.trim(),
         note: note.trim(),
+        skipBiometric,
       });
 
       await refresh();
 
-      setPinOpen(false);
       setResultSuccess(true);
       setResultOpen(true);
     } catch (e) {
       console.warn("Send failed:", e);
-      setPinOpen(false);
       setResultSuccess(false);
       setResultOpen(true);
     } finally {
+      setPinOpen(false);
       clearPin();
     }
+  };
+
+  const onSendPress = async () => {
+    const err = validate();
+    if (err) {
+      await notifyLocal("Validation", err);
+      return;
+    }
+
+    setConfirmOpen(true);
+  };
+
+  const onConfirmPress = async () => {
+    setConfirmOpen(false);
+    const ok = await confirmBiometric("Confirm payment");
+    if (ok) {
+      await performSend(true);
+      return;
+    }
+
+    await hapticLight();
+    clearPin();
+    setPinOpen(true);
+  };
+
+  const doSend = async () => {
+    const code = pin.join("");
+    if (code.length !== 4) {
+      await notifyLocal("Invalid PIN", "Enter your 4-digit PIN.");
+      return;
+    }
+    await performSend(true);
   };
 
   const topSpacer = Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : 0;
@@ -254,12 +295,27 @@ export default function TransactionScreen() {
           </TouchableOpacity>
         </View>
 
+        <Text style={[styles.label, { marginTop: 16 }]}>Bank</Text>
+        <TouchableOpacity style={styles.bankRow} activeOpacity={0.85} onPress={() => setBankOpen(true)}>
+          <View style={styles.bankLeft}>
+            <MaterialIcons name="account-balance" size={18} color="rgba(255,255,255,0.7)" />
+            <Text style={[styles.bankText, !selectedBank && styles.bankPlaceholder]}>
+              {selectedBank?.name ?? "Select bank"}
+            </Text>
+          </View>
+          <MaterialIcons name="expand-more" size={22} color="rgba(255,255,255,0.6)" />
+        </TouchableOpacity>
+
         {/* Recent */}
         <Text style={[styles.label, { marginTop: 18 }]}>Recent</Text>
         <View style={styles.recentsRow}>
           {/* Add */}
           <View style={styles.recentItem}>
-            <TouchableOpacity style={styles.addCircle} activeOpacity={0.85} onPress={() => Alert.alert("Add", "Add new contact (demo).")}>
+            <TouchableOpacity
+              style={styles.addCircle}
+              activeOpacity={0.85}
+              onPress={() => notifyLocal("Add", "Add new contact (demo).")}
+            >
               <MaterialIcons name="add" size={26} color="rgba(255,255,255,0.35)" />
             </TouchableOpacity>
             <Text style={[styles.recentName, { opacity: 0 }]}>Add</Text>
@@ -284,7 +340,11 @@ export default function TransactionScreen() {
         </View>
 
         {/* Currency pill */}
-        <TouchableOpacity style={styles.currencyPill} activeOpacity={0.9} onPress={() => Alert.alert("Currency", "USD only (demo).")}>
+        <TouchableOpacity
+          style={styles.currencyPill}
+          activeOpacity={0.9}
+          onPress={() => notifyLocal("Currency", "USD only (demo).")}
+        >
           <View style={styles.currencyDot}>
             <Text style={styles.currencyDotText}>$</Text>
           </View>
@@ -343,6 +403,68 @@ export default function TransactionScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* BANK SHEET */}
+      <Modal visible={bankOpen} transparent animationType="fade" onRequestClose={() => setBankOpen(false)}>
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setBankOpen(false)}>
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>Choose bank</Text>
+            {BANKS.map((bank) => {
+              const active = selectedBank?.id === bank.id;
+              return (
+                <TouchableOpacity
+                  key={bank.id}
+                  style={[styles.bankItem, active && styles.bankItemActive]}
+                  onPress={() => {
+                    setSelectedBank(bank);
+                    setBankOpen(false);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.bankItemText}>{bank.name}</Text>
+                  {active ? (
+                    <MaterialIcons name="check-circle" size={20} color={COLORS.green} />
+                  ) : (
+                    <MaterialIcons name="radio-button-unchecked" size={20} color="rgba(255,255,255,0.3)" />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* CONFIRM BANK INFO */}
+      <Modal visible={confirmOpen} transparent animationType="fade" onRequestClose={() => setConfirmOpen(false)}>
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setConfirmOpen(false)}>
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>Confirm bank info</Text>
+
+            <View style={styles.confirmRow}>
+              <Text style={styles.confirmLabel}>Recipient</Text>
+              <Text style={styles.confirmValue}>{selected?.fullName || toQuery.trim()}</Text>
+            </View>
+
+            <View style={styles.confirmRow}>
+              <Text style={styles.confirmLabel}>Bank</Text>
+              <Text style={styles.confirmValue}>{selectedBank?.name ?? "—"}</Text>
+            </View>
+
+            <View style={styles.confirmRow}>
+              <Text style={styles.confirmLabel}>Amount</Text>
+              <Text style={styles.confirmValue}>{formatMoney(amount)}</Text>
+            </View>
+
+            <TouchableOpacity style={styles.sheetDone} onPress={onConfirmPress} activeOpacity={0.9}>
+              <Text style={styles.sheetDoneText}>Continue</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.pinCancel} onPress={() => setConfirmOpen(false)} activeOpacity={0.85}>
+              <Text style={styles.pinCancelText}>Edit</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* NOTE MODAL */}
       <Modal visible={noteOpen} transparent animationType="fade" onRequestClose={() => setNoteOpen(false)}>
@@ -504,6 +626,31 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface2,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  bankRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(50,68,103,0.75)",
+    paddingHorizontal: 14,
+    height: 52,
+  },
+  bankLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  bankText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  bankPlaceholder: {
+    color: "rgba(255,255,255,0.45)",
   },
 
   recentsRow: {
@@ -755,6 +902,48 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "900",
     fontSize: 16,
+  },
+  bankItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: "rgba(25,34,51,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    marginTop: 10,
+  },
+  bankItemActive: {
+    borderColor: "rgba(19,91,236,0.7)",
+    backgroundColor: "rgba(19,91,236,0.12)",
+  },
+  bankItemText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  confirmRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+  },
+  confirmLabel: {
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  confirmValue: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "800",
+    maxWidth: "70%",
+    textAlign: "right",
   },
 
   pinCard: {

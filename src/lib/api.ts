@@ -6,6 +6,7 @@ export type User = {
   name: string;
   identifier: string;
   balance: number;
+  accountNumber?: string;
   createdAt: string;
 };
 
@@ -28,6 +29,7 @@ function toUser(row: any): User {
     name: row?.name ?? "",
     identifier: row?.identifier ?? "",
     balance: Number(row?.balance ?? 0),
+    accountNumber: row?.account_number ?? row?.accountNumber ?? undefined,
     createdAt: row?.created_at ?? row?.createdAt ?? new Date().toISOString(),
   };
 }
@@ -49,6 +51,27 @@ function toTransaction(row: any): Transaction {
 
 const MIN_FEE = 10;
 const FEE_RATE = 0.015;
+const ACCOUNT_LEN = 10;
+
+function deriveAccountNumber(userId: string): string {
+  let hash = 0;
+  for (let i = 0; i < userId.length; i += 1) {
+    hash = (hash * 31 + userId.charCodeAt(i)) % 10000000000;
+  }
+  const raw = Math.abs(hash) % 10000000000;
+  return String(raw).padStart(ACCOUNT_LEN, "0");
+}
+
+async function ensureAccountNumber(userId: string, current?: string | null): Promise<string> {
+  if (current && String(current).trim()) return String(current);
+  const next = deriveAccountNumber(userId);
+  try {
+    await supabase.from("users").update({ account_number: next }).eq("id", userId);
+  } catch {
+    // best-effort: return derived value even if update fails
+  }
+  return next;
+}
 
 async function getUserRow(userId: string) {
   const { data, error } = await supabase.from("users").select("*").eq("id", userId).single();
@@ -76,6 +99,7 @@ export async function signupUser({
 
   const userId = authData?.user?.id;
   if (!userId) throw new Error("Supabase signup did not return a user ID.");
+  const accountNumber = deriveAccountNumber(userId);
 
   // If we already have a session (email confirmation off), create the profile row now.
   if (authData.session) {
@@ -87,6 +111,7 @@ export async function signupUser({
           name,
           identifier,
           balance: 0,
+          account_number: accountNumber,
         },
         { onConflict: "id" },
       )
@@ -99,6 +124,7 @@ export async function signupUser({
     name,
     identifier,
     balance: 0,
+    accountNumber,
     createdAt: new Date().toISOString(),
   };
 }
@@ -119,7 +145,10 @@ export async function loginUser({
   const userId = data?.user?.id;
   if (!userId) throw new Error("Missing user ID after login.");
   const row = await getUserRow(userId);
-  if (row) return toUser(row);
+  if (row) {
+    const accountNumber = await ensureAccountNumber(userId, row?.account_number ?? row?.accountNumber);
+    return { ...toUser(row), accountNumber };
+  }
 
   // Create profile row if missing (e.g., email confirmation flow or trigger not run)
   const { data: created, error: insertError } = await supabase
@@ -129,6 +158,7 @@ export async function loginUser({
       name: data.user?.user_metadata?.name ?? data.user?.email ?? identifier,
       identifier: data.user?.email ?? identifier,
       balance: 0,
+      account_number: deriveAccountNumber(userId),
     })
     .select()
     .single();
@@ -145,7 +175,10 @@ export async function getCurrentUser(): Promise<User | null> {
   const userId = data?.user?.id;
   if (!userId) return null;
   const row = await getUserRow(userId);
-  if (row) return toUser(row);
+  if (row) {
+    const accountNumber = await ensureAccountNumber(userId, row?.account_number ?? row?.accountNumber);
+    return { ...toUser(row), accountNumber };
+  }
 
   // If profile row is missing but session exists, create it on the fly
   const { data: created, error: insertError } = await supabase
@@ -155,6 +188,7 @@ export async function getCurrentUser(): Promise<User | null> {
       name: data.user?.user_metadata?.name ?? data.user?.email ?? "",
       identifier: data.user?.email ?? "",
       balance: 0,
+      account_number: deriveAccountNumber(userId),
     })
     .select()
     .maybeSingle();

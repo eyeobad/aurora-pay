@@ -18,6 +18,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import FloatingNavBar, { FloatingNavItem } from "../components/organisms/FloatingNavBar";
 import { useApp } from "../context/AppContext";
 import { AppText } from "../components";
+import { notifyLocal } from "../lib/notifications";
 
 type Nav = {
   navigate: (screen: string, params?: any) => void;
@@ -136,6 +137,8 @@ export default function DashboardScreen() {
   const refreshing = state.loading ?? false;
   const balance = state.balance ?? 0;
   const transactions = state.transactions ?? [];
+  const accountNumber = state.user?.accountNumber ?? "0000000000";
+  const accountDisplay = accountNumber.replace(/(\d{4})(?=\d)/g, "$1 ");
 
   useEffect(() => {
     if (!state.user) navigation.navigate("Login");
@@ -244,8 +247,12 @@ export default function DashboardScreen() {
                     <Text style={styles.deltaSub}>this month</Text>
                   </View>
 
-                  <TouchableOpacity style={styles.cardNumberRow} accessibilityRole="button">
-                    <Text style={styles.cardNumber}>**** 4582</Text>
+                  <TouchableOpacity
+                    style={styles.cardNumberRow}
+                    accessibilityRole="button"
+                    onPress={() => notifyLocal("Account number", accountNumber)}
+                  >
+                    <Text style={styles.cardNumber}>{accountDisplay}</Text>
                     <MaterialIcons name="content-copy" size={16} color="#fff" />
                   </TouchableOpacity>
                 </View>

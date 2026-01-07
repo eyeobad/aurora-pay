@@ -13,7 +13,6 @@ import {
   ScrollView,
   Animated,
   Dimensions,
-  Alert,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -47,7 +46,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList, "Login">;
 
 export default function LoginScreen() {
   const navigation = useNavigation<NavigationProp>();
-  const { state, login } = useApp();
+  const { state, login, confirmBiometric } = useApp();
   const [email, setEmail] = useState("alex@aurora.com");
   const [password, setPassword] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
@@ -126,8 +125,15 @@ export default function LoginScreen() {
     }
   };
 
-  const handleFaceID = () => {
+  const handleFaceID = async () => {
     scanAnim.setValue(0);
+    if (!state.user) {
+      showToast("Log in once to enable Face ID");
+      return;
+    }
+
+    const result = await confirmBiometric("Confirm login");
+
     Animated.sequence([
       Animated.timing(scanAnim, {
         toValue: 1,
@@ -140,7 +146,15 @@ export default function LoginScreen() {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      showToast("Face ID Verified");
+      showToast(result ? "Face ID Verified" : "Authentication failed");
+      if (result) {
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: "Dashboard" }],
+          })
+        );
+      }
     });
   };
 
@@ -244,10 +258,7 @@ export default function LoginScreen() {
               </View>
 
               {/* Forgot password link */}
-              <TouchableOpacity
-                style={styles.forgotContainer}
-                onPress={() => Alert.alert("Forgot Password", "Password reset is coming soon.")}
-              >
+              <TouchableOpacity style={styles.forgotContainer} onPress={() => navigation.navigate("ForgotPassword")}>
                 <Text style={styles.forgotText}>Forgot Password?</Text>
               </TouchableOpacity>
 

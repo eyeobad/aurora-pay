@@ -10,13 +10,13 @@ import {
   TextInput,
   Modal,
   Platform,
-  Alert,
 } from "react-native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useNavigation } from "@react-navigation/native";
 import { useApp } from "../context/AppContext";
+import { notifyLocal } from "../lib/notifications";
 
 const COLORS = {
   bg: "#101622",
@@ -172,7 +172,7 @@ export default function TransactionrequestScreen() {
   const onSendPress = async () => {
     const err = validate();
     if (err) {
-      Alert.alert("Validation", err);
+      await notifyLocal("Validation", err);
       return;
     }
     await hapticLight();
@@ -183,7 +183,7 @@ export default function TransactionrequestScreen() {
   const doSend = async () => {
     const code = pin.join("");
     if (code.length !== 4) {
-      Alert.alert("Invalid PIN", "Enter your 4-digit PIN.");
+      await notifyLocal("Invalid PIN", "Enter your 4-digit PIN.");
       return;
     }
 
@@ -257,7 +257,11 @@ export default function TransactionrequestScreen() {
         <View style={styles.recentsRow}>
           {/* Add */}
           <View style={styles.recentItem}>
-            <TouchableOpacity style={styles.addCircle} activeOpacity={0.85} onPress={() => Alert.alert("Add", "Add new contact (demo).")}>
+            <TouchableOpacity
+              style={styles.addCircle}
+              activeOpacity={0.85}
+              onPress={() => notifyLocal("Add", "Add new contact (demo).")}
+            >
               <MaterialIcons name="add" size={26} color="rgba(255,255,255,0.35)" />
             </TouchableOpacity>
             <Text style={[styles.recentName, { opacity: 0 }]}>Add</Text>
@@ -282,7 +286,11 @@ export default function TransactionrequestScreen() {
         </View>
 
         {/* Currency pill */}
-        <TouchableOpacity style={styles.currencyPill} activeOpacity={0.9} onPress={() => Alert.alert("Currency", "USD only (demo).")}>
+        <TouchableOpacity
+          style={styles.currencyPill}
+          activeOpacity={0.9}
+          onPress={() => notifyLocal("Currency", "USD only (demo).")}
+        >
           <View style={styles.currencyDot}>
             <Text style={styles.currencyDotText}>$</Text>
           </View>

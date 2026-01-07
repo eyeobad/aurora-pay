@@ -12,9 +12,13 @@ import {
   Switch,
   Platform,
   Dimensions,
+  Modal,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useIsFocused, useNavigation } from "@react-navigation/native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
+import QRCode from "react-native-qrcode-svg";
+import { useApp } from "../context/AppContext";
+import { notifyLocal } from "../lib/notifications";
 
 
 type Nav = {
@@ -108,17 +112,36 @@ const Row = ({
 
 export default function ProfileScreen() {
   const navigation = useNavigation<Nav>();
-  const [biometric, setBiometric] = useState(true);
+  const isFocused = useIsFocused();
+  const { state, refresh, logout, setBiometricsEnabled, setShowAccountNumber, setShowBalance } = useApp();
+  const [qrOpen, setQrOpen] = useState(false);
+
+  const prefs = state.preferences;
+  const accountNumber = state.user?.accountNumber ?? "0000000000";
+  const maskedAccount = `•••• •••• ${accountNumber.slice(-4)}`;
+  const balance = state.balance ?? 0;
 
   const user = useMemo(
     () => ({
-      name: "Alex Morgan",
-      handle: "@alexm",
+      name: state.user?.name ?? "Alex Morgan",
+      handle: state.user?.identifier ? `@${state.user.identifier.split("@")[0]}` : "@aurora",
       avatar:
         "https://lh3.googleusercontent.com/aida-public/AB6AXuBgCkzQOjJiaAnheJZs3ffMra-XWbD4UhJeen7RLJVA28abiXYLrXqCchoyLkoxzUDGT8fpYHp6339tBFtGv-UKOhOLbtQRSWW8G7uttIg22u2TtGZeWxhSt7xkPlGMQeMteMc7dr-WTE79IdIQMYFfqrYiZyC9Qn8m9p0V9zBqzhn6gf0b3tiDBegT-OeIZLCbYJroXyfYrNrd66q6_i2NsVOnUx3MNU2AFMYureuKzd_mtLX3BjdjMGohVN4UsLe9nvZo-aMEFtaP",
     }),
-    [],
+    [state.user?.name, state.user?.identifier],
   );
+
+  const formatCurrency = (value: number) => {
+    try {
+      return value.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+    } catch {
+      return `$${value.toFixed(2)}`;
+    }
+  };
+
+  React.useEffect(() => {
+    if (isFocused) refresh().catch(() => {});
+  }, [isFocused, refresh]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -179,9 +202,17 @@ export default function ProfileScreen() {
               <Text style={styles.statLabel}>TOTAL ASSETS</Text>
 
               <View style={styles.statValueRow}>
-                <Text style={styles.statValue}>$2,450.50</Text>
-                <TouchableOpacity activeOpacity={0.85} style={styles.eyeBtn}>
-                  <MaterialIcons name="visibility" size={18} color={COLORS.textMuted} />
+                <Text style={styles.statValue}>{prefs.showBalance ? formatCurrency(balance) : "••••"}</Text>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.eyeBtn}
+                  onPress={() => setShowBalance(!prefs.showBalance)}
+                >
+                  <MaterialIcons
+                    name={prefs.showBalance ? "visibility" : "visibility-off"}
+                    size={18}
+                    color={COLORS.textMuted}
+                  />
                 </TouchableOpacity>
               </View>
 
@@ -205,7 +236,7 @@ export default function ProfileScreen() {
           {/* Actions Bar */}
           <View style={styles.actionsWrap}>
             <View style={styles.actionsRow}>
-              <TouchableOpacity activeOpacity={0.85} style={styles.actionItem}>
+              <TouchableOpacity activeOpacity={0.85} style={styles.actionItem} onPress={() => setQrOpen(true)}>
                 <View style={styles.actionCircle}>
                   <MaterialCommunityIcons name="qrcode" size={24} color="#fff" />
                 </View>
@@ -226,7 +257,11 @@ export default function ProfileScreen() {
                 <Text style={styles.actionLabel}>History</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity activeOpacity={0.85} style={styles.actionItem}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.actionItem}
+                onPress={() => notifyLocal("Share", "Share options are coming soon.")}
+              >
                 <View style={styles.actionCircle}>
                   <MaterialIcons name="ios-share" size={24} color="#fff" />
                 </View>
@@ -240,18 +275,20 @@ export default function ProfileScreen() {
             <Text style={styles.sectionTitle}>ACCOUNT</Text>
             <View style={styles.sectionCard}>
               <Row
-                icon={{ pack: "mi", name: "person" }}
+                icon={{ pack: "mi", name: "account-balance" }}
                 iconBg="rgba(59,130,246,0.14)"
                 iconColor={COLORS.primary}
-                title="Personal Details"
-                onPress={() => navigation.navigate("PersonalDetails")}
+                title="Account Number"
+                rightText={prefs.showAccountNumber ? accountNumber : maskedAccount}
+                onPress={() => setShowAccountNumber(!prefs.showAccountNumber)}
+                showChevron={false}
               />
               <Row
                 icon={{ pack: "mi", name: "account-balance" }}
                 iconBg="rgba(59,130,246,0.14)"
                 iconColor={COLORS.primary}
                 title="Linked Banks & Cards"
-                onPress={() => navigation.navigate("LinkedBanks")}
+                onPress={() => navigation.navigate("MyCards")}
                 isLast
               />
             </View>
@@ -269,8 +306,8 @@ export default function ProfileScreen() {
                 showChevron={false}
                 rightSlot={
                   <Switch
-                    value={biometric}
-                    onValueChange={setBiometric}
+                    value={prefs.biometricsEnabled}
+                    onValueChange={setBiometricsEnabled}
                     trackColor={{ false: "#232f48", true: COLORS.primary }}
                     thumbColor="#ffffff"
                   />
@@ -280,8 +317,8 @@ export default function ProfileScreen() {
                 icon={{ pack: "mi", name: "lock-reset" }}
                 iconBg="rgba(34,197,94,0.14)"
                 iconColor={Platform.OS === "ios" ? "#34d399" : "#22c55e"}
-                title="Change PIN"
-                onPress={() => navigation.navigate("ChangePin")}
+                title="Change Password"
+                onPress={() => notifyLocal("Coming soon", "Password changes are handled via reset flow for now.")}
                 isLast
               />
             </View>
@@ -297,14 +334,14 @@ export default function ProfileScreen() {
                 iconColor={COLORS.purple}
                 title="Preferences"
                 rightText="English"
-                onPress={() => navigation.navigate("Preferences")}
+                onPress={() => navigation.navigate("Settings")}
               />
               <Row
                 icon={{ pack: "mi", name: "help" }}
                 iconBg="rgba(168,85,247,0.14)"
                 iconColor={COLORS.purple}
                 title="Help & Support"
-                onPress={() => navigation.navigate("Support")}
+                onPress={() => notifyLocal("Support", "Help center is coming soon.")}
                 isLast
               />
             </View>
@@ -312,13 +349,34 @@ export default function ProfileScreen() {
 
           {/* Logout */}
           <View style={styles.logoutWrap}>
-            <TouchableOpacity activeOpacity={0.85} style={styles.logoutBtn}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.logoutBtn}
+              onPress={async () => {
+                await logout();
+                navigation.navigate("Login");
+              }}
+            >
               <Text style={styles.logoutText}>Log Out</Text>
             </TouchableOpacity>
             <Text style={styles.versionText}>Aurora Pay v1.0.2 (Build 240)</Text>
           </View>
         </ScrollView>
 
+        <Modal visible={qrOpen} transparent animationType="fade" onRequestClose={() => setQrOpen(false)}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setQrOpen(false)}>
+            <View style={styles.qrSheet}>
+              <Text style={styles.qrTitle}>My Aurora QR</Text>
+              <View style={styles.qrWrap}>
+                <QRCode value={`aurora://pay?account=${accountNumber}`} size={180} />
+              </View>
+              <Text style={styles.qrSub}>{accountNumber}</Text>
+              <TouchableOpacity style={styles.qrCloseBtn} activeOpacity={0.9} onPress={() => setQrOpen(false)}>
+                <Text style={styles.qrCloseText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -490,4 +548,37 @@ const styles = StyleSheet.create({
   },
   logoutText: { color: "#f87171", fontSize: 13, fontWeight: "900", letterSpacing: 0.6 },
   versionText: { color: COLORS.textMuted, fontSize: 12, fontWeight: "600" },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+  },
+  qrSheet: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#232f48",
+    alignItems: "center",
+  },
+  qrTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
+  qrWrap: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: "#fff",
+  },
+  qrSub: { marginTop: 12, color: COLORS.textMuted, fontSize: 14, fontWeight: "700" },
+  qrCloseBtn: {
+    marginTop: 16,
+    height: 48,
+    borderRadius: 999,
+    paddingHorizontal: 24,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qrCloseText: { color: "#fff", fontSize: 14, fontWeight: "900" },
 });

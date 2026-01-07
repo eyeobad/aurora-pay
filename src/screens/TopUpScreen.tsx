@@ -9,12 +9,14 @@ import {
   StatusBar,
   Modal,
   Platform,
+  TextInput,
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useNavigation } from "@react-navigation/native";
 import { useApp } from "../context/AppContext";
+import { notifyLocal } from "../lib/notifications";
 
 const COLORS = {
   bg: "#101622",
@@ -48,7 +50,7 @@ const FUNDING_SOURCES: FundingSource[] = [
 
 export default function TopUpScreen() {
   const nav = useNavigation<any>();
-  const { state, topUp, refresh } = useApp();
+  const { state, topUp, refresh, confirmBiometric } = useApp();
 
   const balance = state.balance ?? 0;
 
@@ -56,6 +58,15 @@ export default function TopUpScreen() {
   const [amountStr, setAmountStr] = useState<string>("50");
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [selectedSource, setSelectedSource] = useState<FundingSource>(FUNDING_SOURCES[1]); // default Chase
+  const [processing, setProcessing] = useState(false);
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pin, setPin] = useState(["", "", "", ""]);
+  const pinRefs = [
+    useRef<TextInput | null>(null),
+    useRef<TextInput | null>(null),
+    useRef<TextInput | null>(null),
+    useRef<TextInput | null>(null),
+  ];
 
   // ---- Amount helpers
   const parsedAmount = useMemo(() => {
@@ -135,23 +146,71 @@ export default function TopUpScreen() {
     setShowSourceModal(false);
   };
 
-  const addFunds = async () => {
-    if (parsedAmount <= 0) return;
+  const clearPin = () => {
+    setPin(["", "", "", ""]);
+    setTimeout(() => pinRefs[0].current?.focus(), 60);
+  };
 
-    await hapticSuccess();
+  const onPinChange = (idx: number, v: string) => {
+    const value = v.slice(-1).replace(/[^0-9]/g, "");
+    const next = [...pin];
+    next[idx] = value;
+    setPin(next);
+
+    if (value && idx < 3) pinRefs[idx + 1].current?.focus();
+    if (!value && idx > 0) pinRefs[idx - 1].current?.focus();
+  };
+
+  const performTopUp = async (skipBiometric: boolean) => {
+    if (parsedAmount <= 0) {
+      await notifyLocal("Invalid amount", "Enter an amount greater than 0.");
+      return;
+    }
 
     try {
+      setProcessing(true);
+      await hapticSuccess();
       await topUp({
         amount: parsedAmount,
         fee: 0,
         note: `Top up from ${selectedSource.label} ${selectedSource.detail}`,
+        skipBiometric,
       });
       await refresh();
+      setPinOpen(false);
       nav.goBack();
     } catch (e) {
-      // keep simple (your app may have toast)
-      console.warn("Top up failed:", e);
+      await notifyLocal("Top-up failed", "Unable to complete this top up.");
+    } finally {
+      setProcessing(false);
+      clearPin();
     }
+  };
+
+  const onAddFundsPress = async () => {
+    if (parsedAmount <= 0) {
+      await notifyLocal("Invalid amount", "Enter an amount greater than 0.");
+      return;
+    }
+
+    const ok = await confirmBiometric("Confirm top up");
+    if (ok) {
+      await performTopUp(true);
+      return;
+    }
+
+    await hapticLight();
+    clearPin();
+    setPinOpen(true);
+  };
+
+  const doTopUp = async () => {
+    const code = pin.join("");
+    if (code.length !== 4) {
+      await notifyLocal("Invalid PIN", "Enter your 4-digit PIN.");
+      return;
+    }
+    await performTopUp(true);
   };
 
   const topSpacer = Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : 0;
@@ -239,14 +298,19 @@ export default function TopUpScreen() {
       {/* Bottom panel: CTA + keypad */}
       <View style={styles.bottomPanel}>
         <View style={styles.ctaWrap}>
-          <TouchableOpacity style={styles.ctaBtn} onPress={addFunds} activeOpacity={0.92}>
+          <TouchableOpacity
+            style={[styles.ctaBtn, (processing || parsedAmount <= 0) && { opacity: 0.7 }]}
+            onPress={onAddFundsPress}
+            activeOpacity={0.92}
+            disabled={processing || parsedAmount <= 0}
+          >
             <LinearGradient
               colors={[COLORS.primary, COLORS.primaryDark]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.ctaGradient}
             >
-              <Text style={styles.ctaText}>Add Funds</Text>
+              <Text style={styles.ctaText}>{processing ? "Processing..." : "Add Funds"}</Text>
               <MaterialIcons name="arrow-forward" size={20} color="#fff" />
             </LinearGradient>
           </TouchableOpacity>
@@ -307,6 +371,45 @@ export default function TopUpScreen() {
                 </TouchableOpacity>
               );
             })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={pinOpen} transparent animationType="fade" onRequestClose={() => setPinOpen(false)}>
+        <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={() => setPinOpen(false)}>
+          <View style={styles.pinCard}>
+            <Text style={styles.sheetTitle}>Enter PIN</Text>
+            <Text style={styles.pinSub}>Enter your 4-digit PIN to authorize</Text>
+
+            <View style={styles.pinRow}>
+              {pin.map((p, i) => (
+                <TextInput
+                  key={i}
+                  ref={(r) => (pinRefs[i].current = r)}
+                  value={p}
+                  onChangeText={(v) => onPinChange(i, v)}
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  secureTextEntry
+                  style={styles.pinBox}
+                />
+              ))}
+            </View>
+
+            <TouchableOpacity style={styles.pinConfirm} onPress={doTopUp} activeOpacity={0.92}>
+              <LinearGradient
+                colors={[COLORS.primary, COLORS.primaryDark]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.pinConfirmGrad}
+              >
+                <Text style={styles.pinConfirmText}>Confirm</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.pinCancel} onPress={() => setPinOpen(false)} activeOpacity={0.85}>
+              <Text style={styles.pinCancelText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -595,5 +698,69 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     marginTop: 2,
+  },
+
+  pinCard: {
+    backgroundColor: COLORS.bg,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 18,
+    paddingBottom: 22,
+    borderTopWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  pinSub: {
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 12,
+  },
+  pinRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+    marginTop: 6,
+  },
+  pinBox: {
+    flex: 1,
+    height: 56,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(25,34,51,0.92)",
+    color: "#fff",
+    textAlign: "center",
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  pinConfirm: {
+    height: 52,
+    borderRadius: 999,
+    overflow: "hidden",
+    marginTop: 14,
+  },
+  pinConfirmGrad: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pinConfirmText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+  pinCancel: {
+    height: 48,
+    borderRadius: 999,
+    marginTop: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(25,34,51,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  pinCancelText: {
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: "800",
   },
 });

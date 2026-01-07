@@ -5,6 +5,7 @@ import { CameraView, BarcodeScanningResult, useCameraPermissions } from "expo-ca
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
+import { notifyLocal } from "../lib/notifications";
 
 const COLORS = {
   bg: "#101622",
@@ -17,25 +18,56 @@ export default function ScannerScreen() {
   const navigation = useNavigation<any>();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const [scanAccount, setScanAccount] = useState<string | null>(null);
 
   useEffect(() => {
     if (!permission) return;
     if (!permission.granted) requestPermission();
   }, [permission, requestPermission]);
 
+  const parseAccount = (data: string) => {
+    if (!data) return null;
+    if (data.includes("account=")) {
+      const query = data.split("?")[1] ?? "";
+      if (typeof URLSearchParams !== "undefined") {
+        const params = new URLSearchParams(query);
+        const account = params.get("account");
+        if (account) return account;
+      } else {
+        const pairs = query.split("&");
+        for (const pair of pairs) {
+          const [key, value] = pair.split("=");
+          if (key === "account" && value) return decodeURIComponent(value);
+        }
+      }
+    }
+    const digits = data.replace(/[^0-9]/g, "");
+    if (digits.length >= 10) return digits.slice(0, 10);
+    return null;
+  };
+
   const handleBarcodeScanned = async (result: BarcodeScanningResult) => {
     if (scanned) return;
     setScanned(true);
 
-    // ✅ HAPTIC on successful scan
+    // ?. HAPTIC on successful scan
     try {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {}
 
-    console.log("Scanned:", result.data);
+    const account = parseAccount(result.data);
+    if (!account) {
+      await notifyLocal("Invalid QR", "No account number found in this code.");
+      setTimeout(() => {
+        setScanAccount(null);
+        setScanned(false);
+      }, 800);
+      return;
+    }
 
+    setScanAccount(account);
     setTimeout(() => {
-      navigation.goBack();
+      navigation.navigate("Transaction", { accountNumber: account });
     }, 800);
   };
 
@@ -44,6 +76,7 @@ export default function ScannerScreen() {
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch {}
+    setScanAccount(null);
     setScanned(false);
   };
 
@@ -87,7 +120,9 @@ export default function ScannerScreen() {
 
         <View style={styles.frame} />
 
-        <Text style={styles.hintText}>Align QR code within the frame</Text>
+        <Text style={styles.hintText}>
+          {scanAccount ? `Account ${scanAccount} found` : "Align QR code within the frame"}
+        </Text>
 
         {scanned && (
           <TouchableOpacity style={styles.rescanBtn} onPress={onRescan}>
@@ -168,3 +203,5 @@ const styles = StyleSheet.create({
   },
   rescanText: { color: "#fff", fontWeight: "800" },
 });
+
+

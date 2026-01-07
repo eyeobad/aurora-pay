@@ -4,6 +4,7 @@ import React, { useEffect } from "react";
 import { Platform } from "react-native";
 import "react-native-get-random-values";
 import * as Notifications from "expo-notifications";
+import * as Linking from "expo-linking";
 
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -15,6 +16,8 @@ import { AppProvider } from "./src/context/AppContext";
 import SplashScreen from "./src/screens/SplashScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import SignupScreen from "./src/screens/SignupScreen";
+import ForgotPasswordScreen from "./src/screens/ForgotPasswordScreen";
+import ResetPasswordScreen from "./src/screens/ResetPasswordScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
 import TransactionScreen from "./src/screens/TransactionScreen";
 import TransactionHistoryScreen from "./src/screens/TransactionHistoryScreen";
@@ -26,6 +29,19 @@ import PayBillsScreen from "./src/screens/PayBillsScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 const Stack = createNativeStackNavigator();
+
+const linking = {
+  prefixes: [Linking.createURL("/"), "aurora://"],
+  config: {
+    screens: {
+      ForgotPassword: "forgot-password",
+      ResetPassword: "reset-password",
+      Login: "login",
+      Signup: "signup",
+      Dashboard: "dashboard",
+    },
+  },
+};
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -50,7 +66,7 @@ export default function App() {
   return (
     <AppProvider>
       <SafeAreaProvider>
-        <NavigationContainer>
+        <NavigationContainer linking={linking}>
           <Stack.Navigator
             screenOptions={{
               headerShown: false,
@@ -60,6 +76,8 @@ export default function App() {
             <Stack.Screen name="Splash" component={SplashScreen} />
             <Stack.Screen name="Signup" component={SignupScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
             <Stack.Screen name="Dashboard" component={DashboardScreen} />
             <Stack.Screen name="Transaction" component={TransactionScreen} />
             <Stack.Screen name="History" component={TransactionHistoryScreen} />

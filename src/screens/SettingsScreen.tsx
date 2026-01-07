@@ -15,6 +15,8 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useApp } from "../context/AppContext";
+import { notifyLocal } from "../lib/notifications";
 
 type Nav = {
   navigate: (screen: string, params?: any) => void;
@@ -130,17 +132,18 @@ const NavItem = ({
 
 export default function SettingsScreen() {
   const navigation = useNavigation<Nav>();
-  const [faceId, setFaceId] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
+  const { state, setBiometricsEnabled, logout } = useApp();
+  const prefs = state.preferences;
 
   const user = useMemo(
     () => ({
-      name: "Alex Morgan",
-      email: "alex.morgan@aurora.com",
+      name: state.user?.name ?? "Alex Morgan",
+      email: state.user?.identifier ?? "alex.morgan@aurora.com",
       avatar:
         "https://lh3.googleusercontent.com/aida-public/AB6AXuAmoJnZaf-0WuYgDX4vRNIiDZa27hzoosCWWTW4bNxxhHzLBnlWXU0xf8afcqvQoFhS_-SB42OQ1SD1o6sm7iNWAszJ7he8bRBeaCNs8wsQys-ve4DZ3C6KqCESo_mUvyAvvXOSP08G13npzoWcweqmLVEO4R5b0gc6aj0V8jUlqUgg6ivTKq5GsnBWsapzZJD-XtSQtFx1i7PLUrcJ6SOcZHy6ebdW6iL4ZjbURRgViwE24DZDn1beX2qqncxY5bgeIoGkUEj0oZ36",
     }),
-    [],
+    [state.user?.name, state.user?.identifier],
   );
 
   return (
@@ -197,7 +200,7 @@ export default function SettingsScreen() {
                 iconBg="rgba(59,130,246,0.14)"
                 iconColor={COLORS.primary}
                 title="Change Password"
-                onPress={() => navigation.navigate("ChangePassword")}
+                onPress={() => navigation.navigate("ForgotPassword")}
               />
               <Row
                 icon={{ pack: "mi", name: "face" }}
@@ -207,8 +210,8 @@ export default function SettingsScreen() {
                 showChevron={false}
                 rightSlot={
                   <Switch
-                    value={faceId}
-                    onValueChange={setFaceId}
+                    value={prefs.biometricsEnabled}
+                    onValueChange={setBiometricsEnabled}
                     trackColor={{ false: COLORS.border, true: COLORS.primary }}
                     thumbColor="#ffffff"
                   />
@@ -220,7 +223,7 @@ export default function SettingsScreen() {
                 iconColor={COLORS.teal}
                 title="2-Factor Auth"
                 rightText="Enabled"
-                onPress={() => navigation.navigate("TwoFactor")}
+                onPress={() => notifyLocal("2-Factor Auth", "Security settings are coming soon.")}
                 isLast
               />
             </View>
@@ -235,7 +238,7 @@ export default function SettingsScreen() {
                 iconBg="rgba(249,115,22,0.14)"
                 iconColor={COLORS.orange}
                 title="Notifications"
-                onPress={() => navigation.navigate("Notifications")}
+                onPress={() => notifyLocal("Notifications", "Notification settings are coming soon.")}
               />
               <Row
                 icon={{ pack: "mi", name: "payments" }}
@@ -243,7 +246,7 @@ export default function SettingsScreen() {
                 iconColor={COLORS.green}
                 title="Currency"
                 rightText="USD ($)"
-                onPress={() => navigation.navigate("Currency")}
+                onPress={() => notifyLocal("Currency", "Multi-currency support is coming soon.")}
               />
               <Row
                 icon={{ pack: "mi", name: "dark-mode" }}
@@ -273,14 +276,14 @@ export default function SettingsScreen() {
                 iconBg="rgba(236,72,153,0.14)"
                 iconColor="#ec4899"
                 title="Help Center"
-                onPress={() => navigation.navigate("HelpCenter")}
+                onPress={() => notifyLocal("Help Center", "Support is coming soon.")}
               />
               <Row
                 icon={{ pack: "mi", name: "policy" }}
                 iconBg="rgba(148,163,184,0.12)"
                 iconColor="#94a3b8"
                 title="Privacy Policy"
-                onPress={() => navigation.navigate("PrivacyPolicy")}
+                onPress={() => notifyLocal("Privacy Policy", "Policy view is coming soon.")}
                 isLast
               />
             </View>
@@ -288,7 +291,14 @@ export default function SettingsScreen() {
 
           {/* Logout */}
           <View style={styles.logoutWrap}>
-            <TouchableOpacity activeOpacity={0.85} style={styles.logoutBtn}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.logoutBtn}
+              onPress={async () => {
+                await logout();
+                navigation.navigate("Login");
+              }}
+            >
               <MaterialIcons name="logout" size={18} color="#f87171" />
               <Text style={styles.logoutText}>Log Out</Text>
             </TouchableOpacity>
@@ -297,38 +307,7 @@ export default function SettingsScreen() {
         </ScrollView>
 
         {/* Bottom Navigation (fixed) */}
-        <View style={styles.navWrap}>
-          <View style={styles.navInner}>
-            <NavItem
-              label="Home"
-              icon={<MaterialIcons name="home" size={22} color={COLORS.textMuted2} />}
-              onPress={() => navigation.navigate("Dashboard")}
-            />
-            <NavItem
-              label="Wallet"
-              icon={<MaterialIcons name="account-balance-wallet" size={22} color={COLORS.textMuted2} />}
-              onPress={() => navigation.navigate("MyCards")}
-            />
-
-            <TouchableOpacity activeOpacity={0.9} style={styles.qrBtn} onPress={() => navigation.navigate("Scanner")}>
-              <View style={styles.qrBtnInner}>
-                <MaterialCommunityIcons name="qrcode-scan" size={26} color="#fff" />
-              </View>
-            </TouchableOpacity>
-
-            <NavItem
-              label="Activity"
-              icon={<MaterialIcons name="bar-chart" size={22} color={COLORS.textMuted2} />}
-              onPress={() => navigation.navigate("History")}
-            />
-            <NavItem
-              label="Settings"
-              active
-              icon={<MaterialIcons name="settings" size={22} color={COLORS.primary} />}
-              onPress={() => navigation.navigate("Settings")}
-            />
-          </View>
-        </View>
+        
       </View>
     </SafeAreaView>
   );

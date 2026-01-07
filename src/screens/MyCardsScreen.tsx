@@ -28,7 +28,7 @@ const BG_DARK = "#101622";
 const SURFACE_DARK = "#1E2430";
 const PRIMARY = "#135bec";
 
-type CardItem = { type: "visa" | "mastercard" | "add"; last4?: string; holder?: string; exp?: string };
+type CardItem = { type: "visa" | "mastercard" | "add"; number?: string; last4?: string; holder?: string; exp?: string };
 
 type TxnItem = {
   id: string;
@@ -41,20 +41,34 @@ type TxnItem = {
 
 export default function MyCardsScreen() {
   const insets = useSafeAreaInsets();
-  const { state } = useApp();
+  const { state, setShowCardNumbers } = useApp();
   const [activeIndex, setActiveIndex] = useState(0);
 
   const userName = state.user?.name ?? "Alex Morgan";
   const balance = state.balance ?? 14250;
+  
+  // This comes from AppContext. It is FALSE by default.
+  const showCardNumbers = state.preferences.showCardNumbers;
 
   const cards = useMemo<CardItem[]>(
     () => [
-      { type: "visa", last4: "4291", holder: userName, exp: "09/28" },
-      { type: "mastercard", last4: "8832", holder: userName, exp: "12/26" },
+      { type: "visa", number: "4532 9912 5678 4291", last4: "4291", holder: userName, exp: "09/28" },
+      { type: "mastercard", number: "5255 1234 9876 8832", last4: "8832", holder: userName, exp: "12/26" },
       { type: "add" },
     ],
     [userName],
   );
+
+  // Updated masking logic for cleaner look
+  const maskCardNumber = (value?: string) => {
+    if (!value) return "•••• •••• •••• ••••";
+    // Strip spaces to get raw digits
+    const clean = value.replace(/\s/g, "");
+    // Get last 4
+    const last4 = clean.slice(-4);
+    // Return formatted mask
+    return `•••• •••• •••• ${last4}`;
+  };
 
   const fallbackTxns: TxnItem[] = [
     {
@@ -116,6 +130,12 @@ export default function MyCardsScreen() {
     }
   }).current;
 
+  // Handler for the reveal button
+  const handleToggleCardNumbers = async () => {
+    // This calls the context function which triggers Biometrics if turning ON
+    await setShowCardNumbers(!showCardNumbers);
+  };
+
   const renderCard = ({ item }: { item: CardItem }) => {
     if (item.type === "add") {
       return (
@@ -149,7 +169,10 @@ export default function MyCardsScreen() {
             </View>
 
             <View style={{ gap: 14 }}>
-              <Text style={styles.cardNumber}>•••• •••• •••• {item.last4}</Text>
+              {/* CONDITIONAL RENDERING OF NUMBER */}
+              <Text style={styles.cardNumber}>
+                {showCardNumbers ? item.number : maskCardNumber(item.number)}
+              </Text>
 
               <View style={styles.cardBottomRow}>
                 <View>
@@ -189,7 +212,10 @@ export default function MyCardsScreen() {
           </View>
 
           <View style={{ gap: 14 }}>
-            <Text style={[styles.cardNumber, { opacity: 0.9 }]}>•••• •••• •••• {item.last4}</Text>
+            {/* CONDITIONAL RENDERING OF NUMBER */}
+            <Text style={[styles.cardNumber, { opacity: 0.9 }]}>
+              {showCardNumbers ? item.number : maskCardNumber(item.number)}
+            </Text>
 
             <View style={styles.cardBottomRow}>
               <View>
@@ -215,8 +241,16 @@ export default function MyCardsScreen() {
     );
   };
 
-  const ActionButton = ({ iconName, label }: { iconName: any; label: string }) => (
-    <TouchableOpacity activeOpacity={0.85} style={styles.actionBtn}>
+  const ActionButton = ({
+    iconName,
+    label,
+    onPress,
+  }: {
+    iconName: any;
+    label: string;
+    onPress?: () => void;
+  }) => (
+    <TouchableOpacity activeOpacity={0.85} style={styles.actionBtn} onPress={onPress}>
       <View style={styles.actionIconWrap}>
         <MaterialIcons name={iconName} size={24} color="#FFFFFF" />
       </View>
@@ -300,7 +334,18 @@ export default function MyCardsScreen() {
         <View style={styles.actionsWrap}>
           <View style={styles.actionsRow}>
             <ActionButton iconName="ac-unit" label="Freeze" />
-            <ActionButton iconName="visibility-off" label="Reveal" />
+            
+            {/* ACTION BUTTON LOGIC:
+               1. showCardNumbers defaults to false (from Context default).
+               2. If false, we show "visibility" icon and "Reveal" label.
+               3. On Press, it toggles. AppContext triggers FaceID to allow reveal.
+            */}
+            <ActionButton
+              iconName={showCardNumbers ? "visibility-off" : "visibility"}
+              label={showCardNumbers ? "Hide" : "Reveal"}
+              onPress={handleToggleCardNumbers}
+            />
+            
             <ActionButton iconName="tune" label="Limits" />
             <ActionButton iconName="account-balance-wallet" label="Apple Pay" />
           </View>

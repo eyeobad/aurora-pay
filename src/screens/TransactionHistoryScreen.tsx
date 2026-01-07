@@ -11,7 +11,6 @@ import {
   Animated,
   Easing,
   Platform,
-  Alert,
   StatusBar,
   TextInput,
   Image,
@@ -23,6 +22,7 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { AppText } from "../components";
 import { useApp } from "../context/AppContext";
+import { notifyLocal } from "../lib/notifications";
 
 type Nav = {
   goBack: () => void;
@@ -268,7 +268,7 @@ export default function TransactionHistoryScreen() {
       setPage(1);
     } catch (e) {
       console.warn("Transaction history load failed:", e);
-      Alert.alert("Error", "Could not load transactions (demo).");
+      await notifyLocal("Error", "Could not load transactions (demo).");
     } finally {
       setRefreshing(false);
     }
@@ -351,7 +351,7 @@ export default function TransactionHistoryScreen() {
         <TouchableOpacity
           activeOpacity={0.9}
           style={[styles.row, isPending && { opacity: 0.88 }]}
-          onPress={() => nav.navigate("TransactionDetail", { id: tx.id })}
+          onPress={() => notifyLocal("Details", "Transaction details are coming soon.")}
         >
           {/* Left bubble / avatar */}
           <View style={styles.leftCol}>
@@ -426,7 +426,7 @@ export default function TransactionHistoryScreen() {
           <TouchableOpacity
             style={styles.navBtn}
             accessibilityRole="button"
-            onPress={() => Alert.alert("Filters", "Add a filter modal here if you want.")}
+            onPress={() => notifyLocal("Filters", "Add a filter modal here if you want.")}
           >
             <MaterialIcons name="tune" size={24} color={UI.primary} />
           </TouchableOpacity>
