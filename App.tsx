@@ -23,6 +23,8 @@ import ScannerScreen from "./src/screens/ScannerScreen";
 import TransactionrequestScreen from "./src/screens/TransactionrequestScreen";
 import MyCardsScreen from "./src/screens/MyCardsScreen";
 import PayBillsScreen from "./src/screens/PayBillsScreen";
+import ProfileScreen from "./src/screens/ProfileScreen";
+import SettingsScreen from "./src/screens/SettingsScreen";
 const Stack = createNativeStackNavigator();
 
 Notifications.setNotificationHandler({
@@ -66,6 +68,8 @@ export default function App() {
             <Stack.Screen name="request" component={TransactionrequestScreen} />
             <Stack.Screen name="MyCards" component={MyCardsScreen} />
             <Stack.Screen name="PayBills" component={PayBillsScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>

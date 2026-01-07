@@ -82,7 +82,7 @@ const items = [
   },
 ];
 
-// ✅ map your `items[].icon` to REAL icon names (MaterialCommunityIcons)
+// map items[].icon -> MaterialCommunityIcons
 const itemIcon = (icon?: string) => {
   switch (icon) {
     case "music":
@@ -98,7 +98,6 @@ const itemIcon = (icon?: string) => {
   }
 };
 
-// ✅ optional: color like the HTML design (Spotify green / orange / slate)
 const itemIconColor = (icon?: string) => {
   switch (icon) {
     case "music":
@@ -114,7 +113,6 @@ const itemIconColor = (icon?: string) => {
   }
 };
 
-// ✅ optional: subtle tinted background like the HTML design
 const itemIconBg = (icon?: string) => {
   switch (icon) {
     case "music":
@@ -157,10 +155,7 @@ export default function DashboardScreen() {
         subtitle: `${tx.type.charAt(0).toUpperCase() + tx.type.slice(1)} • ${new Date(
           tx.createdAt
         ).toLocaleDateString()}`,
-        amount:
-          tx.type === "send"
-            ? `-$${Number(tx.amount).toFixed(2)}`
-            : `+$${Number(tx.amount).toFixed(2)}`,
+        amount: tx.type === "send" ? `-$${Number(tx.amount).toFixed(2)}` : `+$${Number(tx.amount).toFixed(2)}`,
         status: tx.type,
         icon: tx.type === "send" ? "laptop" : "person",
       }));
@@ -181,7 +176,15 @@ export default function DashboardScreen() {
       <View style={styles.topBar}>
         <View style={styles.userRow}>
           <View style={styles.avatarWrap}>
-            <Image style={styles.avatar} source={require("../assets/logo (1).png")} resizeMode="cover" />
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate("Profile")}
+              style={styles.avatarTap}
+              accessibilityRole="button"
+              accessibilityLabel="Go to Profile"
+            >
+              <Image style={styles.avatar} source={require("../assets/logo (1).png")} resizeMode="cover" />
+            </TouchableOpacity>
           </View>
 
           <View>
@@ -216,7 +219,6 @@ export default function DashboardScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.balanceCard}
               >
-                {/* glow blobs */}
                 <View style={[styles.blob, styles.blobTopRight]} />
                 <View style={[styles.blob2, styles.blobBottomLeft]} />
 
@@ -309,7 +311,7 @@ export default function DashboardScreen() {
         )}
       />
 
-      {/* ✅ FloatingNavBar with blur + centered scanner */}
+      {/* FloatingNavBar with centered scanner */}
       <FloatingNavBar
         activeKey="home"
         primary={COLORS.primary}
@@ -323,7 +325,7 @@ export default function DashboardScreen() {
           { key: "home", icon: "home", pack: "mi", onPress: () => navigation.navigate("Dashboard") } as FloatingNavItem,
           { key: "cards", icon: "credit-card", pack: "mci", onPress: () => navigation.navigate("MyCards") } as FloatingNavItem,
           { key: "history", icon: "history", pack: "mi", onPress: () => navigation.navigate("History") } as FloatingNavItem,
-          { key: "settings", icon: "settings", pack: "mi", onPress: () => navigation.navigate("request") } as FloatingNavItem,
+          { key: "settings", icon: "settings", pack: "mi", onPress: () => navigation.navigate("Settings") } as FloatingNavItem,
         ]}
       />
     </SafeAreaView>
@@ -359,6 +361,11 @@ const styles = StyleSheet.create({
     borderColor: COLORS.borderLight,
     backgroundColor: COLORS.surfaceDark,
   },
+  // ✅ added
+  avatarTap: {
+    width: "100%",
+    height: "100%",
+  },
   avatar: {
     width: "100%",
     height: "100%",
@@ -374,7 +381,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  // ✅ IMPORTANT: leave space for floating nav
   listContent: {
     paddingBottom: NAV_H + 64,
   },

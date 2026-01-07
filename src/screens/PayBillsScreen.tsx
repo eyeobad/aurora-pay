@@ -290,7 +290,7 @@ export default function PayBillsScreen() {
             // ✅ match your screenshot: Pay uses "payments" icon
             { key: "pay", icon: "credit-card", pack: "mi", onPress: () => navigation.navigate("PayBills") } as FloatingNavItem,
             { key: "cards", icon: "history", pack: "mci", onPress: () => navigation.navigate("MyCards") } as FloatingNavItem,
-            { key: "profile", icon: "settings", pack: "mi", onPress: () => navigation.navigate("Profile") } as FloatingNavItem,
+            { key: "profile", icon: "settings", pack: "mi", onPress: () => navigation.navigate("Settings") } as FloatingNavItem,
           ]}
         />
       </View>
