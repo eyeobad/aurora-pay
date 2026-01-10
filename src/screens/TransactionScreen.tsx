@@ -10,6 +10,8 @@ import {
   TextInput,
   Modal,
   Platform,
+  FlatList,
+  ActivityIndicator,
 } from "react-native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -48,6 +50,8 @@ type Bank = {
   name: string;
 };
 
+type RecentItem = { id: string; type: "add" } | (RecentPerson & { type: "person" });
+
 const RECENTS: RecentPerson[] = [
   { id: "alice", name: "Alice", fullName: "Alice Johnson", initials: "AJ", online: true },
   { id: "robert", name: "Robert", fullName: "Robert Miles", initials: "RM" },
@@ -62,6 +66,42 @@ const BANKS: Bank[] = [
   { id: "citi", name: "Citi Bank" },
   { id: "usbank", name: "US Bank" },
 ];
+
+const ACCOUNT_LEN = 10;
+const FIRST_NAMES = ["Alex", "Jordan", "Taylor", "Morgan", "Avery", "Casey", "Riley", "Parker", "Cameron", "Reese"];
+const LAST_NAMES = ["Johnson", "Williams", "Brown", "Davis", "Miller", "Wilson", "Moore", "Anderson", "Thomas", "Clark"];
+
+const normalizeAccountNumber = (value: string) => {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length >= ACCOUNT_LEN) return digits.slice(-ACCOUNT_LEN);
+  return digits.padStart(ACCOUNT_LEN, "0");
+};
+
+const isAccountInput = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  const compact = trimmed.replace(/\s/g, "");
+  return /^\d+$/.test(compact);
+};
+
+const deriveAccountFromName = (name: string) => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) {
+    hash = (hash * 31 + name.charCodeAt(i)) % 10000000000;
+  }
+  const raw = Math.abs(hash) % 10000000000;
+  return String(raw).padStart(ACCOUNT_LEN, "0");
+};
+
+const deriveNameFromAccount = (account: string) => {
+  const digits = account.replace(/\D/g, "");
+  if (!digits) return "";
+  const seed = parseInt(digits.slice(-6), 10);
+  const first = FIRST_NAMES[seed % FIRST_NAMES.length];
+  const last = LAST_NAMES[Math.floor(seed / FIRST_NAMES.length) % LAST_NAMES.length];
+  return `${first} ${last}`;
+};
 
 export default function TransactionScreen() {
   const nav = useNavigation<any>();
@@ -84,6 +124,27 @@ export default function TransactionScreen() {
       setSelected(null);
     }
   }, [prefill]);
+
+  const recipientInput = toQuery.trim() || selected?.fullName || "";
+  const derivedRecipient = useMemo(() => {
+    if (!recipientInput) return { name: "", accountNumber: "" };
+    if (isAccountInput(recipientInput)) {
+      const normalized = normalizeAccountNumber(recipientInput);
+      return {
+        name: deriveNameFromAccount(normalized),
+        accountNumber: normalized,
+      };
+    }
+    return {
+      name: recipientInput,
+      accountNumber: deriveAccountFromName(recipientInput),
+    };
+  }, [recipientInput]);
+
+  const recentsData = useMemo<RecentItem[]>(
+    () => [{ id: "add", type: "add" }, ...RECENTS.map((p) => ({ ...p, type: "person" as const }))],
+    [],
+  );
 
   // keypad amount
   const [amountStr, setAmountStr] = useState<string>("150"); // matches your screenshot default
@@ -113,6 +174,7 @@ export default function TransactionScreen() {
 
   const [resultOpen, setResultOpen] = useState(false);
   const [resultSuccess, setResultSuccess] = useState<boolean | null>(null);
+  const [sending, setSending] = useState(false);
 
   const formatMoney = (n: number) => {
     try {
@@ -197,13 +259,14 @@ export default function TransactionScreen() {
   };
 
   const performSend = async (skipBiometric: boolean) => {
+    setSending(true);
     try {
       await hapticSuccess();
 
       await send({
         amount,
         fee: 0,
-        counterparty: selected?.fullName || toQuery.trim(),
+        counterparty: derivedRecipient.name || recipientInput,
         note: note.trim(),
         skipBiometric,
       });
@@ -219,6 +282,7 @@ export default function TransactionScreen() {
     } finally {
       setPinOpen(false);
       clearPin();
+      setSending(false);
     }
   };
 
@@ -308,36 +372,45 @@ export default function TransactionScreen() {
 
         {/* Recent */}
         <Text style={[styles.label, { marginTop: 18 }]}>Recent</Text>
-        <View style={styles.recentsRow}>
-          {/* Add */}
-          <View style={styles.recentItem}>
-            <TouchableOpacity
-              style={styles.addCircle}
-              activeOpacity={0.85}
-              onPress={() => notifyLocal("Add", "Add new contact (demo).")}
-            >
-              <MaterialIcons name="add" size={26} color="rgba(255,255,255,0.35)" />
-            </TouchableOpacity>
-            <Text style={[styles.recentName, { opacity: 0 }]}>Add</Text>
-          </View>
+        <FlatList
+          horizontal
+          data={recentsData}
+          keyExtractor={(item) => item.id}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.recentsRow}
+          ItemSeparatorComponent={() => <View style={{ width: 14 }} />}
+          renderItem={({ item }) => {
+            if (item.type === "add") {
+              return (
+                <View style={styles.recentItem}>
+                  <TouchableOpacity
+                    style={styles.addCircle}
+                    activeOpacity={0.85}
+                    onPress={() => notifyLocal("Add", "Add new contact (demo).")}
+                  >
+                    <MaterialIcons name="add" size={26} color="rgba(255,255,255,0.35)" />
+                  </TouchableOpacity>
+                  <Text style={[styles.recentName, { opacity: 0 }]}>Add</Text>
+                </View>
+              );
+            }
 
-          {RECENTS.map((p) => {
-            const active = selected?.id === p.id;
+            const active = selected?.id === item.id;
             return (
-              <View key={p.id} style={styles.recentItem}>
+              <View style={styles.recentItem}>
                 <TouchableOpacity
                   style={[styles.avatarCircle, active && styles.avatarActive]}
-                  onPress={() => onPickRecent(p)}
+                  onPress={() => onPickRecent(item)}
                   activeOpacity={0.9}
                 >
-                  <Text style={styles.avatarText}>{p.initials}</Text>
-                  {p.online ? <View style={styles.onlineDot} /> : null}
+                  <Text style={styles.avatarText}>{item.initials}</Text>
+                  {item.online ? <View style={styles.onlineDot} /> : null}
                 </TouchableOpacity>
-                <Text style={styles.recentName}>{p.name}</Text>
+                <Text style={styles.recentName}>{item.name}</Text>
               </View>
             );
-          })}
-        </View>
+          }}
+        />
 
         {/* Currency pill */}
         <TouchableOpacity
@@ -404,6 +477,17 @@ export default function TransactionScreen() {
         </View>
       </View>
 
+      {/* LOADING MODAL */}
+      <Modal visible={sending} transparent animationType="fade">
+        <View style={styles.loadingBackdrop}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.loadingTitle}>Processing transfer</Text>
+            <Text style={styles.loadingSub}>Finalizing your payment...</Text>
+          </View>
+        </View>
+      </Modal>
+
       {/* BANK SHEET */}
       <Modal visible={bankOpen} transparent animationType="fade" onRequestClose={() => setBankOpen(false)}>
         <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setBankOpen(false)}>
@@ -442,12 +526,17 @@ export default function TransactionScreen() {
 
             <View style={styles.confirmRow}>
               <Text style={styles.confirmLabel}>Recipient</Text>
-              <Text style={styles.confirmValue}>{selected?.fullName || toQuery.trim()}</Text>
+              <Text style={styles.confirmValue}>{derivedRecipient.name || recipientInput}</Text>
             </View>
 
             <View style={styles.confirmRow}>
               <Text style={styles.confirmLabel}>Bank</Text>
               <Text style={styles.confirmValue}>{selectedBank?.name ?? "—"}</Text>
+            </View>
+
+            <View style={styles.confirmRow}>
+              <Text style={styles.confirmLabel}>Account Number</Text>
+              <Text style={styles.confirmValue}>{derivedRecipient.accountNumber || "—"}</Text>
             </View>
 
             <View style={styles.confirmRow}>
@@ -655,7 +744,6 @@ const styles = StyleSheet.create({
 
   recentsRow: {
     flexDirection: "row",
-    gap: 14,
     paddingBottom: 6,
     alignItems: "flex-start",
   },
@@ -1030,6 +1118,38 @@ const styles = StyleSheet.create({
     marginTop: 6,
     color: "rgba(255,255,255,0.65)",
     fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+
+  loadingBackdrop: {
+    flex: 1,
+    backgroundColor: COLORS.overlay,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  loadingCard: {
+    width: "100%",
+    maxWidth: 320,
+    backgroundColor: COLORS.bg,
+    borderRadius: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    gap: 10,
+  },
+  loadingTitle: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: 6,
+  },
+  loadingSub: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 12,
     fontWeight: "700",
     textAlign: "center",
   },

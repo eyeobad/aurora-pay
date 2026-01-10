@@ -45,6 +45,7 @@ const NAV_H = 72;
 const { width: SCREEN_W } = Dimensions.get("window");
 const MAX_W = 420;
 const CONTAINER_W = Math.min(SCREEN_W, MAX_W);
+const AVATAR_SOURCE = require("../../assets/avatar.png");
 
 const Icon = ({
   pack,
@@ -125,8 +126,7 @@ export default function ProfileScreen() {
     () => ({
       name: state.user?.name ?? "Alex Morgan",
       handle: state.user?.identifier ? `@${state.user.identifier.split("@")[0]}` : "@aurora",
-      avatar:
-        "https://lh3.googleusercontent.com/aida-public/AB6AXuBgCkzQOjJiaAnheJZs3ffMra-XWbD4UhJeen7RLJVA28abiXYLrXqCchoyLkoxzUDGT8fpYHp6339tBFtGv-UKOhOLbtQRSWW8G7uttIg22u2TtGZeWxhSt7xkPlGMQeMteMc7dr-WTE79IdIQMYFfqrYiZyC9Qn8m9p0V9zBqzhn6gf0b3tiDBegT-OeIZLCbYJroXyfYrNrd66q6_i2NsVOnUx3MNU2AFMYureuKzd_mtLX3BjdjMGohVN4UsLe9nvZo-aMEFtaP",
+      avatar: AVATAR_SOURCE,
     }),
     [state.user?.name, state.user?.identifier],
   );
@@ -167,7 +167,7 @@ export default function ProfileScreen() {
             <View style={styles.profileInner}>
               <View style={styles.avatarWrap}>
                 <ImageBackground
-                  source={{ uri: user.avatar }}
+                  source={user.avatar}
                   style={styles.avatar}
                   imageStyle={styles.avatarImg}
                   resizeMode="cover"

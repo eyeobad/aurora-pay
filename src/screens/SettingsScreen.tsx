@@ -44,6 +44,7 @@ const NAV_H = 84;
 const { width: SCREEN_W } = Dimensions.get("window");
 const MAX_W = 420;
 const CONTAINER_W = Math.min(SCREEN_W, MAX_W);
+const AVATAR_SOURCE = require("../../assets/avatar.png");
 
 const Icon = ({
   pack,
@@ -140,8 +141,7 @@ export default function SettingsScreen() {
     () => ({
       name: state.user?.name ?? "Alex Morgan",
       email: state.user?.identifier ?? "alex.morgan@aurora.com",
-      avatar:
-        "https://lh3.googleusercontent.com/aida-public/AB6AXuAmoJnZaf-0WuYgDX4vRNIiDZa27hzoosCWWTW4bNxxhHzLBnlWXU0xf8afcqvQoFhS_-SB42OQ1SD1o6sm7iNWAszJ7he8bRBeaCNs8wsQys-ve4DZ3C6KqCESo_mUvyAvvXOSP08G13npzoWcweqmLVEO4R5b0gc6aj0V8jUlqUgg6ivTKq5GsnBWsapzZJD-XtSQtFx1i7PLUrcJ6SOcZHy6ebdW6iL4ZjbURRgViwE24DZDn1beX2qqncxY5bgeIoGkUEj0oZ36",
+      avatar: AVATAR_SOURCE,
     }),
     [state.user?.name, state.user?.identifier],
   );
@@ -171,7 +171,7 @@ export default function SettingsScreen() {
           <View style={styles.profileWrap}>
             <View style={styles.profileInner}>
               <View style={styles.avatarWrap}>
-                <Image source={{ uri: user.avatar }} style={styles.avatar} resizeMode="cover" />
+                <Image source={user.avatar} style={styles.avatar} resizeMode="cover" />
                 <TouchableOpacity activeOpacity={0.9} style={styles.avatarEditBtn}>
                   <MaterialIcons name="edit" size={16} color="#fff" />
                 </TouchableOpacity>
@@ -306,7 +306,7 @@ export default function SettingsScreen() {
           </View>
         </ScrollView>
 
-        {/* Bottom Navigation (fixed) */}
+    
         
       </View>
     </SafeAreaView>

@@ -19,6 +19,7 @@ import SignupScreen from "./src/screens/SignupScreen";
 import ForgotPasswordScreen from "./src/screens/ForgotPasswordScreen";
 import ResetPasswordScreen from "./src/screens/ResetPasswordScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
+import NotificationScreen from "./src/screens/NotificationScreen";
 import TransactionScreen from "./src/screens/TransactionScreen";
 import TransactionHistoryScreen from "./src/screens/TransactionHistoryScreen";
 import TopUpScreen from "./src/screens/TopUpScreen";
@@ -79,6 +80,7 @@ export default function App() {
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
             <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
             <Stack.Screen name="Dashboard" component={DashboardScreen} />
+            <Stack.Screen name="Notifications" component={NotificationScreen} />
             <Stack.Screen name="Transaction" component={TransactionScreen} />
             <Stack.Screen name="History" component={TransactionHistoryScreen} />
             <Stack.Screen name="TopUp" component={TopUpScreen} />

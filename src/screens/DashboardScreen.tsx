@@ -186,7 +186,7 @@ export default function DashboardScreen() {
               accessibilityRole="button"
               accessibilityLabel="Go to Profile"
             >
-              <Image style={styles.avatar} source={require("../assets/logo (1).png")} resizeMode="cover" />
+              <Image style={styles.avatar} source={require("../../assets/avatar.png")} resizeMode="cover" />
             </TouchableOpacity>
           </View>
 
@@ -200,7 +200,12 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.notifBtn} accessibilityRole="button">
+        <TouchableOpacity
+          style={styles.notifBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Notifications"
+          onPress={() => navigation.navigate("Notifications")}
+        >
           <MaterialIcons name="notifications" size={24} color="#f8fafc" />
         </TouchableOpacity>
       </View>
